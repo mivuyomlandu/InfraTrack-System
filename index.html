@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>City of Johannesburg – Public Works Maintenance System</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='4' fill='%230B1F3A'/><text y='22' x='4' font-size='18'>🏗️</text></svg>">
+</head>
+<body>
+
+<div id="home-screen" class="screen-view">
+  <div class="home-dark-overlay">
+    
+    <header class="home-navbar">
+      <div class="logo-group">
+        <div class="logo-box">🏗️</div>
+        <div>
+          <div class="logo-title-top">InfraTrack</div>
+          <div class="logo-title-sub">Public Works Hub</div>
+        </div>
+      </div>
+      <div class="navbar-actions">
+        <button class="btn btn-outline-light" onclick="showScreen('login-screen')">Log In</button>
+        <button class="btn btn-gold" onclick="showScreen('signup-screen')">Sign Up</button>
+      </div>
+    </header>
+
+    <section class="hero-section">
+      <div class="hero-content">
+        <h1>Building a Better Johannesburg Together</h1>
+        <p>Report structural faults, track municipal resolution cycles, and monitor civic development across your region instantly.</p>
+        
+        <div class="hero-btn-group">
+          <button class="btn btn-gold btn-lg" onclick="handleGuestLogTicket()">Log a Ticket</button>
+          <button class="btn btn-primary btn-lg" onclick="showScreen('signup-screen')">Create Citizen Account</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="track-section">
+      <div class="track-card">
+        <h3>Track Existing Ticket Status</h3>
+        <p class="text-muted">Enter your unique ticket reference code below to review real-time progress updates.</p>
+        <div class="track-input-container">
+          <input type="text" id="home-track-id" class="form-control" placeholder="e.g. TK-2401">
+          <button class="btn btn-primary" onclick="handleHomeTrackTicket()">Track a Ticket</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="testimonials-section">
+      <h2>Voice of Joburg's People</h2>
+      <div class="testimonials-grid">
+        <div class="testimonial-card">
+          <div class="quote-mark">“</div>
+          <p>The burst water pipe on Vilakazi street was resolved within 24 hours of reporting. Exceptional tracking updates!</p>
+          <div class="citizen-profile">
+            <strong>- Lerato M., Soweto</strong>
+          </div>
+        </div>
+        <div class="testimonial-card">
+          <div class="quote-mark">“</div>
+          <p>As a business owner in the CBD, keeping the streetlights active changes everything. The transparency here is magnificent.</p>
+          <div class="citizen-profile">
+            <strong>- David K., Marshalltown</strong>
+          </div>
+        </div>
+        <div class="testimonial-card">
+          <div class="quote-mark">“</div>
+          <p>Logged an illegal dumping site near our community park. Contractors cleared it out and sanitized the space beautifully.</p>
+          <div class="citizen-profile">
+            <strong>- Thando N., Alexandra</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="home-footer">
+      <div>&copy; 2026 City of Johannesburg Infrastructure Department. All Rights Reserved.</div>
+    </footer>
+  </div>
+</div>
+
+
+<div id="login-screen" class="screen-view hidden">
+  <div class="login-page">
+    <div class="login-left">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:2.5rem">
+          <div style="width:52px;height:52px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🏗️</div>
+          <div>
+            <div style="font-family:var(--font-head);font-size:0.75rem;letter-spacing:0.15em;color:rgba(255,255,255,0.5);text-transform:uppercase">City of</div>
+            <div style="font-family:var(--font-head);font-size:1rem;font-weight:800;color:rgba(255,255,255,0.85);letter-spacing:0.06em;text-transform:uppercase">Johannesburg</div>
+          </div>
+        </div>
+        <div class="city-name">
+          Public<br>Works
+          <span>Maintenance System</span>
+        </div>
+        <div class="login-divider"></div>
+        <p class="tagline">
+          A centralized digital platform for tracking and managing public infrastructure
+          maintenance requests across the city.
+        </p>
+      </div>
+      <button class="btn btn-outline-light" style="align-self: flex-start; margin-top:2rem;" onclick="showScreen('home-screen')">← Back to Homepage</button>
+    </div>
+
+    <div class="login-right">
+      <div class="login-form-box">
+        <div class="login-header">Sign In</div>
+        <p class="text-muted" style="margin-bottom:1.5rem">Provide your credentials to access your profile portal</p>
+        
+        <div class="alert alert-danger hidden" id="login-error"></div>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="login-email" class="form-control" placeholder="name@domain.co.za" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="login-password" class="form-control" placeholder="••••••••" required>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block btn-lg" style="margin-top:1rem">Authenticate Account 🔐</button>
+        </form>
+
+        <div class="login-footer-links">
+          Don't have an active login? <a href="#" onclick="showScreen('signup-screen'); return false;">Sign Up Here</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="signup-screen" class="screen-view hidden">
+  <div class="login-page">
+    <div class="login-left">
+      <div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:2.5rem">
+          <div style="width:52px;height:52px;background:var(--gold);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.6rem">🏗️</div>
+          <div>
+            <div style="font-family:var(--font-head);font-size:0.75rem;letter-spacing:0.15em;color:rgba(255,255,255,0.5);text-transform:uppercase">City of</div>
+            <div style="font-family:var(--font-head);font-size:1rem;font-weight:800;color:rgba(255,255,255,0.85);letter-spacing:0.06em;text-transform:uppercase">Johannesburg</div>
+          </div>
+        </div>
+        <div class="city-name">
+          Join Us<br>Online
+          <span>Create Central Profile</span>
+        </div>
+        <div class="login-divider"></div>
+        <p class="tagline">
+          Register to log infrastructure faults directly, claim contracting assignments, or review departmental dashboards.
+        </p>
+      </div>
+      <button class="btn btn-outline-light" style="align-self: flex-start; margin-top:2rem;" onclick="showScreen('home-screen')">← Back to Homepage</button>
+    </div>
+
+    <div class="login-right">
+      <div class="login-form-box">
+        <div class="login-header">Sign Up Portal</div>
+        <p class="text-muted" style="margin-bottom:1.5rem">All information entered below will register onto your custom database system.</p>
+        
+        <div class="alert alert-danger hidden" id="signup-error"></div>
+
+        <form id="signup-form">
+          <div class="form-group">
+            <label class="form-label">Account Classification Role</label>
+            <select id="signup-role" class="form-control" required>
+              <option value="citizen">Citizen / Resident</option>
+              <option value="contractor">Contractor / Repair Worker</option>
+              <option value="admin">System Administrator (Admin)</option>
+            </select>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First Name</label>
+              <input type="text" id="signup-name" class="form-control" placeholder="John" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Surname</label>
+              <input type="text" id="signup-surname" class="form-control" placeholder="Doe" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" id="signup-email" class="form-control" placeholder="john.doe@joburg.gov.za" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" id="signup-password" class="form-control" placeholder="••••••••" minlength="4" required>
+          </div>
+
+          <button type="submit" class="btn btn-gold btn-block btn-lg" style="margin-top:1rem">Register Account 📋</button>
+        </form>
+
+        <div class="login-footer-links">
+          Already registered? <a href="#" onclick="showScreen('login-screen'); return false;">Log In Instead</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<div id="app-shell" class="screen-view hidden">
+  <header class="top-bar">
+    <a class="top-bar-logo" href="#" onclick="return false">
+      <div style="width:36px;height:36px;background:var(--gold);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:1.1rem">🏗️</div>
+      <div class="top-bar-logo-text">
+        <div class="city">Joburg Public Works</div>
+        <div class="dept">Infrastructure Maintenance System</div>
+      </div>
+    </a>
+
+    <div class="top-bar-right">
+      <div class="notif-bell" onclick="navigate('notifications')">
+        🔔
+        <span class="notif-dot"></span>
+      </div>
+      <div class="user-pill">
+        <div class="user-avatar" id="user-initials">??</div>
+        <span id="user-name">User</span>
+      </div>
+      <button class="btn-logout" onclick="logout()">Log Out</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar"></nav>
+    <main class="main" id="main-content"></main>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<div id="ticket-modal-container"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
