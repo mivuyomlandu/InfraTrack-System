@@ -133,52 +133,73 @@ function handleGuestLogTicket() {
   }, 1200);
 }
 
-// ── LOGIN & SIGNUP FORMS HANDLERS ─────────────────────────────
+// ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
+  const API_URL = "http://localhost:3000";
+
+  // =========================
+  // LOGIN HANDLER
+  // =========================
   const logForm = document.getElementById('login-form');
   if (logForm) {
-    logForm.addEventListener('submit', e => {
+    logForm.addEventListener('submit', async e => {
       e.preventDefault();
+
       const email = document.getElementById('login-email').value.trim();
       const password = document.getElementById('login-password').value.trim();
       const errEl = document.getElementById('login-error');
-      
+
+      errEl.classList.add('hidden');
+
       if (!email || !password) {
-        errEl.textContent = 'Please fill in all identity fields correctly.';
+        errEl.textContent = 'Please fill in all fields.';
         errEl.classList.remove('hidden');
         return;
       }
 
-      let resolvedRole = 'citizen';
-      let formattedName = 'Citizen Resident';
-      
-      if (email.includes('admin')) {
-        resolvedRole = 'admin';
-        formattedName = 'System Administrator';
-      } else if (email.includes('contractor') || email.includes('worker')) {
-        resolvedRole = 'worker';
-        formattedName = 'Musa Dlamini';
-      } else {
-        formattedName = email.split('@')[0];
-        formattedName = formattedName.charAt(0).toUpperCase() + formattedName.slice(1);
-      }
+      try {
+        const res = await fetch(`${API_URL}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
 
-      APP.currentUser = {
-        name: formattedName,
-        initials: formattedName.substring(0, 2).toUpperCase(),
-        email: email
-      };
-      APP.currentRole = resolvedRole;
-      
-      showToast(`Authenticated successfully as ${formattedName}!`, 'success');
-      loadApp();
+        const data = await res.json();
+
+        if (!data.success) {
+          errEl.textContent = "Invalid email or password.";
+          errEl.classList.remove('hidden');
+          return;
+        }
+
+        const user = data.user;
+
+        APP.currentUser = {
+          name: `${user.name} ${user.surname}`,
+          initials: (user.name[0] + user.surname[0]).toUpperCase(),
+          email: user.email
+        };
+
+        APP.currentRole = user.role;
+
+        showToast(`Welcome back ${user.name}!`, 'success');
+        loadApp();
+
+      } catch (err) {
+        errEl.textContent = "Server error. Please try again.";
+        errEl.classList.remove('hidden');
+      }
     });
   }
 
+  // =========================
+  // SIGNUP HANDLER
+  // =========================
   const signForm = document.getElementById('signup-form');
   if (signForm) {
-    signForm.addEventListener('submit', e => {
+    signForm.addEventListener('submit', async e => {
       e.preventDefault();
+
       const role = document.getElementById('signup-role').value;
       const name = document.getElementById('signup-name').value.trim();
       const surname = document.getElementById('signup-surname').value.trim();
@@ -186,34 +207,57 @@ function initGlobalAuthHandlers() {
       const password = document.getElementById('signup-password').value.trim();
       const errEl = document.getElementById('signup-error');
 
+      errEl.classList.add('hidden');
+
       if (!role || !name || !surname || !email || !password) {
-        errEl.textContent = 'All validation elements must be completed.';
+        errEl.textContent = 'All fields are required.';
         errEl.classList.remove('hidden');
         return;
       }
 
-      console.log('Storing record safely inside target user database structures:', { role, name, surname, email, password });
-      showToast(`🎉 Registration saved to Database! Logging you in as ${name}.`, 'success');
-      
-      let mappedAppRole = 'citizen';
-      if (role === 'admin') mappedAppRole = 'admin';
-      if (role === 'contractor') mappedAppRole = 'worker';
+      try {
+        const res = await fetch(`${API_URL}/signup`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            role,
+            name,
+            surname,
+            email,
+            password
+          })
+        });
 
-      APP.currentUser = {
-        name: `${name} ${surname}`,
-        initials: (name[0] + surname[0]).toUpperCase(),
-        email: email
-      };
-      APP.currentRole = mappedAppRole;
-      
-      setTimeout(() => {
-        loadApp();
-        signForm.reset();
-      }, 1000);
+        const data = await res.json();
+
+        if (!data.success) {
+          errEl.textContent = data.message || "Signup failed.";
+          errEl.classList.remove('hidden');
+          return;
+        }
+
+        showToast("Account created successfully!", "success");
+
+        APP.currentUser = {
+          name: `${name} ${surname}`,
+          initials: (name[0] + surname[0]).toUpperCase(),
+          email: email
+        };
+
+        APP.currentRole = role;
+
+        setTimeout(() => {
+          loadApp();
+          signForm.reset();
+        }, 800);
+
+      } catch (err) {
+        errEl.textContent = "Server error. Please try again.";
+        errEl.classList.remove('hidden');
+      }
     });
   }
 }
-
 // ── LOAD APP SHELL ─────────────────────────────────────────────
 function loadApp() {
   document.getElementById('login-screen').classList.add('hidden');
