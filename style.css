@@ -70,6 +70,10 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* Add this to ensure it shows correctly when .hidden is removed */
+#home-screen:not(.hidden) {
+  display: flex !important;
+}
 
 /* Dark layout shading overlay over the background picture to maintain text contrast */
 .home-dark-overlay {
@@ -512,3 +516,24 @@ tr:hover td { background-color: #F8FAFC; }
 
 .page { animation: fadeIn 0.25s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+
+.back-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gold);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  margin-top: 2rem;
+  padding: 8px 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+}
+
+.back-home-link:hover {
+  color: var(--gold-light);
+  border-bottom-color: var(--gold-light);
+}

@@ -40,14 +40,21 @@ function showScreen(screenId) {
   const targetedView = document.getElementById(screenId);
   if (targetedView) {
     targetedView.classList.remove('hidden');
+    targetedView.style.display = screenId === 'home-screen' ? 'flex' : '';
   }
-  
-  // Clean up existing error feedback notifications
+
   const logErr = document.getElementById('login-error');
   const signErr = document.getElementById('signup-error');
   if (logErr) logErr.classList.add('hidden');
   if (signErr) signErr.classList.add('hidden');
-}
+  }
+  
+ /* // Clean up existing error feedback notifications
+  const logErr = document.getElementById('login-error');
+  const signErr = document.getElementById('signup-error');
+  if (logErr) logErr.classList.add('hidden');
+  if (signErr) signErr.classList.add('hidden');
+}*/
 
 // ── TOAST MESSAGES ───────────────────────────────────────────
 function showToast(msg, type='info') {
@@ -204,12 +211,13 @@ function initGlobalAuthHandlers() {
       const name = document.getElementById('signup-name').value.trim();
       const surname = document.getElementById('signup-surname').value.trim();
       const email = document.getElementById('signup-email').value.trim();
+      const phone = document.getElementById('signup-phone').value.trim();
       const password = document.getElementById('signup-password').value.trim();
       const errEl = document.getElementById('signup-error');
 
       errEl.classList.add('hidden');
 
-      if (!role || !name || !surname || !email || !password) {
+      if (!role || !name || !surname || !email || !phone || !password) {
         errEl.textContent = 'All fields are required.';
         errEl.classList.remove('hidden');
         return;
@@ -224,6 +232,7 @@ function initGlobalAuthHandlers() {
             name,
             surname,
             email,
+            phone,
             password
           })
         });
@@ -577,3 +586,4 @@ function logout() {
   showScreen('home-screen');
   showToast('You have been logged out.', 'info');
 }
+

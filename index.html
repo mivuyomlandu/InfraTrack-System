@@ -104,7 +104,7 @@
           maintenance requests across the city.
         </p>
       </div>
-      <button class="btn btn-outline-light" style="align-self: flex-start; margin-top:2rem;" onclick="showScreen('home-screen')">← Back to Homepage</button>
+      <a href="#" class="back-home-link" onclick="showScreen('home-screen'); return false;">← Back to Homepage</a> 
     </div>
 
     <div class="login-right">
@@ -156,7 +156,7 @@
           Register to log infrastructure faults directly, claim contracting assignments, or review departmental dashboards.
         </p>
       </div>
-      <button class="btn btn-outline-light" style="align-self: flex-start; margin-top:2rem;" onclick="showScreen('home-screen')">← Back to Homepage</button>
+      <a href="#" class="back-home-link" onclick="showScreen('home-screen'); return false;">← Back to Homepage</a> 
     </div>
 
     <div class="login-right">
@@ -170,9 +170,8 @@
           <div class="form-group">
             <label class="form-label">Account Classification Role</label>
             <select id="signup-role" class="form-control" required>
-              <option value="citizen">Citizen / Resident</option>
-              <option value="contractor">Contractor / Repair Worker</option>
-              <option value="admin">System Administrator (Admin)</option>
+              <option value="citizen">Citizen </option>
+              <option value="Technician">Contractor </option>
             </select>
           </div>
 
@@ -191,7 +190,10 @@
             <label class="form-label">Email Address</label>
             <input type="email" id="signup-email" class="form-control" placeholder="john.doe@joburg.gov.za" required>
           </div>
-
+          <div class="form-group">
+            <label class="form-label">Cellphone Number</label>
+            <input type="tel" id="signup-phone" class="form-control" placeholder="e.g. 082 123 4567" required>
+          </div>
           <div class="form-group">
             <label class="form-label">Password</label>
             <input type="password" id="signup-password" class="form-control" placeholder="••••••••" minlength="4" required>
