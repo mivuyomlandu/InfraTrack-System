@@ -135,7 +135,7 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = "http://localhost:3000";
+  const API_URL = "http://105.228.61.32:3000";
 
   // =========================
   // LOGIN HANDLER
