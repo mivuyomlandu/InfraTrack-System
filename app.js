@@ -409,8 +409,13 @@ function renderCreateTicket() {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Ward / Region</label>
-            <input class="form-control" type="text" placeholder="e.g. Region F">
+            <label class="form-label">Priority *</label>
+            <select class="form-control" id="t-priority" required>
+              <option value="">— Select Priority —</option>
+              <option>Low</option>
+              <option selected>Medium</option>
+              <option>High</option>
+            </select>
           </div>
         </div>
         <div style="display:flex;gap:1rem;margin-top:0.5rem">
@@ -597,10 +602,11 @@ function submitTicket() {
   const cat   = document.getElementById('t-cat')?.value;
   const desc  = document.getElementById('t-desc')?.value.trim();
   const loc   = document.getElementById('t-loc')?.value.trim();
-  if (!title || !cat || !desc || !loc) { showToast('Please fill in required fields.','error'); return; }
-  
+  const pri   = (document.getElementById('t-priority')?.value || 'Medium').toLowerCase();
+  if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
+
   const newId = 'TK-' + (2402 + APP.tickets.length);
-  APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:'medium', date:new Date().toISOString().split('T')[0], worker:null, desc });
+  APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:pri, date:new Date().toISOString().split('T')[0], worker:null, desc });
   showToast(`🎉 Ticket ${newId} submitted!`,'success');
   setTimeout(() => navigate('my-tickets'), 800);
 }
