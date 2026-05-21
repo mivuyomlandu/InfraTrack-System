@@ -597,18 +597,37 @@ async function loadLocations() {
   }
 }
 
-function submitTicket() {
+async function submitTicket() {
   const title = document.getElementById('t-title')?.value.trim();
   const cat   = document.getElementById('t-cat')?.value;
   const desc  = document.getElementById('t-desc')?.value.trim();
   const loc   = document.getElementById('t-loc')?.value.trim();
-  const pri   = (document.getElementById('t-priority')?.value || 'Medium').toLowerCase();
+  const pri   = (document.getElementById('t-priority')?.value || 'Medium');
   if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
 
-  const newId = 'TK-' + (2402 + APP.tickets.length);
-  APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:pri, date:new Date().toISOString().split('T')[0], worker:null, desc });
-  showToast(`🎉 Ticket ${newId} submitted!`,'success');
-  setTimeout(() => navigate('my-tickets'), 800);
+  const API_URL = "http://105.228.61.32:3000";
+
+  try {
+    const res = await fetch(`${API_URL}/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, category: cat, description: desc, location: loc, priority: pri, user_id: APP.currentUser?.id })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      showToast(data.message || 'Failed to submit ticket.','error');
+      return;
+    }
+
+    const newId = data.id ? `TK-${data.id}` : 'TK-' + (2402 + APP.tickets.length);
+    APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:pri.toLowerCase(), date:new Date().toISOString().split('T')[0], worker:null, desc });
+    showToast(`🎉 Ticket ${newId} submitted!`,'success');
+    setTimeout(() => navigate('my-tickets'), 800);
+  } catch (err) {
+    console.error('Submit ticket error', err);
+    showToast('Server error while submitting ticket.','error');
+  }
 }
 
 // ── LOGOUT ────────────────────────────────────────────────────
