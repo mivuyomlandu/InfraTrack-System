@@ -76,6 +76,24 @@ app.post("/signup", (req, res) => {
 });
 
 // ────────────────────────────────────────────
+// 📍 GET ALL LOCATIONS
+// ────────────────────────────────────────────
+app.get("/locations", (req, res) => {
+  const sql = "SELECT street, suburb FROM location ORDER BY suburb ASC, street ASC";
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+
+    res.json({
+      success: true,
+      locations: result
+    });
+  });
+});
+
+// ────────────────────────────────────────────
 // 🎫 GET ALL TICKETS
 // ────────────────────────────────────────────
 app.get("/tickets", (req, res) => {
