@@ -76,10 +76,28 @@ app.post("/signup", (req, res) => {
 });
 
 // ────────────────────────────────────────────
+// 📍 GET ALL LOCATIONS (include id)
+// ────────────────────────────────────────────
+app.get("/locations", (req, res) => {
+  const sql = "SELECT location_id, street, suburb FROM location ORDER BY suburb ASC, street ASC";
+
+  db.query(sql, (err, result) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+
+    res.json({
+      success: true,
+      locations: result
+    });
+  });
+});
+
+// ────────────────────────────────────────────
 // 🎫 GET ALL TICKETS
 // ────────────────────────────────────────────
 app.get("/tickets", (req, res) => {
-  db.query("SELECT * FROM tickets ORDER BY id DESC", (err, result) => {
+  db.query("SELECT * FROM ticket ORDER BY id DESC", (err, result) => {
     if (err) {
       return res.status(500).json(err);
     }
@@ -88,24 +106,45 @@ app.get("/tickets", (req, res) => {
 });
 
 // ────────────────────────────────────────────
-// ➕ CREATE TICKET
+// ➕ CREATE TICKET (asset lookup by location + category, and user_id)
 // ────────────────────────────────────────────
 app.post("/tickets", (req, res) => {
-  const { title, category, description, location } = req.body;
+  const { title, category, description, location, priority, user_id } = req.body;
 
-  const sql = `
-    INSERT INTO tickets (title, category, description, location, status, priority, date)
-    VALUES (?, ?, ?, ?, 'pending', 'medium', CURDATE())
-  `;
+  if (!title || !description || !location) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
 
-  db.query(sql, [title, category, description, location], (err, result) => {
-    if (err) {
-      return res.status(500).json(err);
-    }
+  // Parse location string "Street, Suburb"
+  const parts = String(location).split(',').map(p => p.trim());
+  const street = parts[0] || '';
+  const suburb = parts[1] || '';
 
-    res.json({
-      success: true,
-      id: result.insertId
+  // 1) Find location id
+  const locSql = "SELECT * FROM location WHERE street = ? AND suburb = ? LIMIT 1";
+  db.query(locSql, [street, suburb], (locErr, locRes) => {
+    if (locErr) return res.status(500).json({ success: false, message: locErr.message });
+
+    const locRow = (locRes && locRes[0]) || null;
+    const locationId = locRow ? (locRow.id || locRow.location_id) : null;
+
+    // 2) Find matching asset by asset_type (category) and location_id
+    const assetSql = "SELECT * FROM asset WHERE asset_type = ? AND location_id = ? LIMIT 1";
+    db.query(assetSql, [category, locationId], (assetErr, assetRes) => {
+      if (assetErr) return res.status(500).json({ success: false, message: assetErr.message });
+
+      const assetRow = (assetRes && assetRes[0]) || null;
+      const assetId = assetRow ? (assetRow.id || assetRow.asset_id) : null;
+
+      // 3) Insert into tickets table
+      const insertSql = `INSERT INTO ticket (status_id, title, description, priority, asset_id, user_id, date_created) VALUES (?, ?, ?, ?, ?, ?, CURDATE())`;
+      const insertVals = [1, title, description, priority || 'medium', assetId, user_id || null];
+
+      db.query(insertSql, insertVals, (insErr, insRes) => {
+        if (insErr) return res.status(500).json({ success: false, message: insErr.message });
+
+        res.json({ success: true, id: insRes.insertId, asset_id: assetId });
+      });
     });
   });
 });
@@ -116,7 +155,7 @@ app.post("/tickets", (req, res) => {
 app.put("/tickets/:id", (req, res) => {
   const { status } = req.body;
 
-  const sql = "UPDATE tickets SET status = ? WHERE id = ?";
+  const sql = "UPDATE ticket SET status = ? WHERE id = ?";
 
   db.query(sql, [status, req.params.id], (err, result) => {
     if (err) {

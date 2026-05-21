@@ -10,6 +10,7 @@ const APP = {
   currentUser: null,
   currentRole: null,
   currentPage: null,
+  locations: [],
   tickets: [
     { id:'TK-2401', title:'Burst Water Pipe', category:'Water', location:'Soweto, Sector 4', status:'inprogress', priority:'high',  date:'2026-05-14', worker:'M. Dlamini', desc:'Major burst on Vilakazi St, flooding pavement.' },
     { id:'TK-2398', title:'Pothole – Main Reef Rd', category:'Road',    location:'Johannesburg CBD',   status:'assigned',   priority:'high',  date:'2026-05-13', worker:'T. Nkosi',   desc:'Large pothole causing vehicle damage.' },
@@ -60,6 +61,7 @@ function normalizeRole(role) {
 function handleAuthSuccess(user, role) {
   const normalizedRole = normalizeRole(role);
   APP.currentUser = {
+    id: user.user_id || null,
     name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
     initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
     email: user.email || ''
@@ -274,6 +276,7 @@ function loadApp() {
   document.getElementById('user-name').textContent = APP.currentUser.name;
   document.getElementById('user-initials').textContent = APP.currentUser.initials;
 
+  loadLocations();
   buildSidebar();
 
   const defaultPage = {
@@ -324,11 +327,12 @@ function buildSidebar() {
 function renderCitizenDashboard() {
   const stats = APP.tickets;
   const myTickets = stats.slice(0,4);
+  const userIdDisplay = APP.currentUser.id ? `<span class="user-id-badge">#${APP.currentUser.id}</span>` : '';
   return `
   <div class="page-header">
     <div>
       <div class="page-title">Citizen Dashboard</div>
-      <div class="page-subtitle">Welcome back, ${APP.currentUser.name} — track your submissions here.</div>
+      <div class="page-subtitle">Welcome back, ${APP.currentUser.name} ${userIdDisplay} — track your submissions here.</div>
     </div>
     <button class="btn btn-primary" onclick="navigate('create-ticket')">➕ New Ticket</button>
   </div>
@@ -360,6 +364,11 @@ function renderCitizenDashboard() {
 }
 
 function renderCreateTicket() {
+  const locOptions = APP.locations.map(loc => {
+    const displayText = `${loc.street}, ${loc.suburb}`;
+    return `<option value="${displayText}">${displayText}</option>`;
+  }).join('');
+  
   return `
   <div class="page-header">
     <div>
@@ -394,11 +403,19 @@ function renderCreateTicket() {
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Location / Address *</label>
-            <input class="form-control" id="t-loc" type="text" placeholder="Street address or area name">
+            <select class="form-control" id="t-loc" required>
+              <option value="">— Select Location —</option>
+              ${locOptions}
+            </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Ward / Region</label>
-            <input class="form-control" type="text" placeholder="e.g. Region F">
+            <label class="form-label">Priority *</label>
+            <select class="form-control" id="t-priority" required>
+              <option value="">— Select Priority —</option>
+              <option>Low</option>
+              <option selected>Medium</option>
+              <option>High</option>
+            </select>
           </div>
         </div>
         <div style="display:flex;gap:1rem;margin-top:0.5rem">
@@ -564,17 +581,53 @@ function bindPageEvents(page) {
   }
 }
 
-function submitTicket() {
+async function loadLocations() {
+  if (APP.locations.length > 0) return;
+  
+  try {
+    const API_URL = "http://105.228.61.32:3000";
+    const res = await fetch(`${API_URL}/locations`);
+    const data = await res.json();
+    
+    if (data.success) {
+      APP.locations = data.locations;
+    }
+  } catch (err) {
+    console.error('Error loading locations:', err);
+  }
+}
+
+async function submitTicket() {
   const title = document.getElementById('t-title')?.value.trim();
   const cat   = document.getElementById('t-cat')?.value;
   const desc  = document.getElementById('t-desc')?.value.trim();
   const loc   = document.getElementById('t-loc')?.value.trim();
-  if (!title || !cat || !desc || !loc) { showToast('Please fill in required fields.','error'); return; }
-  
-  const newId = 'TK-' + (2402 + APP.tickets.length);
-  APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:'medium', date:new Date().toISOString().split('T')[0], worker:null, desc });
-  showToast(`🎉 Ticket ${newId} submitted!`,'success');
-  setTimeout(() => navigate('my-tickets'), 800);
+  const pri   = (document.getElementById('t-priority')?.value || 'Medium');
+  if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
+
+  const API_URL = "http://105.228.61.32:3000";
+
+  try {
+    const res = await fetch(`${API_URL}/tickets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, category: cat, description: desc, location: loc, priority: pri, user_id: APP.currentUser?.id })
+    });
+
+    const data = await res.json();
+    if (!data.success) {
+      showToast(data.message || 'Failed to submit ticket.','error');
+      return;
+    }
+
+    const newId = data.id ? `TK-${data.id}` : 'TK-' + (2402 + APP.tickets.length);
+    APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:pri.toLowerCase(), date:new Date().toISOString().split('T')[0], worker:null, desc });
+    showToast(`🎉 Ticket ${newId} submitted!`,'success');
+    setTimeout(() => navigate('my-tickets'), 800);
+  } catch (err) {
+    console.error('Submit ticket error', err);
+    showToast('Server error while submitting ticket.','error');
+  }
 }
 
 // ── LOGOUT ────────────────────────────────────────────────────
