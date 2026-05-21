@@ -47,14 +47,26 @@ function showScreen(screenId) {
   const signErr = document.getElementById('signup-error');
   if (logErr) logErr.classList.add('hidden');
   if (signErr) signErr.classList.add('hidden');
-  }
-  
- /* // Clean up existing error feedback notifications
-  const logErr = document.getElementById('login-error');
-  const signErr = document.getElementById('signup-error');
-  if (logErr) logErr.classList.add('hidden');
-  if (signErr) signErr.classList.add('hidden');
-}*/
+}
+
+function normalizeRole(role) {
+  if (!role) return 'citizen';
+  const normalized = String(role).trim().toLowerCase();
+  if (normalized === 'technician' || normalized === 'worker' || normalized === 'contractor') return 'worker';
+  if (normalized === 'admin' || normalized === 'administrator') return 'admin';
+  return 'citizen';
+}
+
+function handleAuthSuccess(user, role) {
+  const normalizedRole = normalizeRole(role);
+  APP.currentUser = {
+    name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
+    initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
+    email: user.email || ''
+  };
+  APP.currentRole = normalizedRole;
+  loadApp();
+}
 
 // ── TOAST MESSAGES ───────────────────────────────────────────
 function showToast(msg, type='info') {
@@ -181,16 +193,8 @@ function initGlobalAuthHandlers() {
 
         const user = data.user;
 
-        APP.currentUser = {
-          name: `${user.name} ${user.surname}`,
-          initials: (user.name[0] + user.surname[0]).toUpperCase(),
-          email: user.email
-        };
-
-        APP.currentRole = user.role;
-
-        showToast(`Welcome back ${user.name}!`, 'success');
-        loadApp();
+        handleAuthSuccess(user, user.role);
+        showToast(`Welcome back ${user.name || user.email}!`, 'success');
 
       } catch (err) {
         errEl.textContent = "Server error. Please try again.";
@@ -247,16 +251,9 @@ function initGlobalAuthHandlers() {
 
         showToast("Account created successfully!", "success");
 
-        APP.currentUser = {
-          name: `${name} ${surname}`,
-          initials: (name[0] + surname[0]).toUpperCase(),
-          email: email
-        };
-
-        APP.currentRole = role;
+        handleAuthSuccess({ name, surname, email }, role);
 
         setTimeout(() => {
-          loadApp();
           signForm.reset();
         }, 800);
 
@@ -283,7 +280,7 @@ function loadApp() {
     citizen: 'dashboard-citizen',
     worker:  'dashboard-worker',
     admin:   'dashboard-admin',
-  }[APP.currentRole];
+  }[APP.currentRole] || 'dashboard-citizen';
   navigate(defaultPage);
 }
 
