@@ -59,8 +59,8 @@ function handleAuthSuccess(user, role) {
     id: user.user_id || null,
     name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
     initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
-    email: user.email || ''
-  };
+    email: user.email || '',
+    technician_status: user.technician_status || (normalizedRole === 'worker' ? 'Active' : null)  };
   APP.currentRole = normalizedRole;
   loadApp();
 }
@@ -102,6 +102,11 @@ function navigate(page) {
   APP.currentPage = page;
   const main = document.getElementById('main-content');
   if (!main) return;
+
+if (page === 'dashboard-worker') {
+  document.getElementById('main-content').innerHTML = renderWorkerDashboard();
+  return; 
+}
 
   const renders = {
     'dashboard-citizen':  renderCitizenDashboard,
@@ -314,7 +319,7 @@ function buildSidebar() {
     worker: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
-      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge">3</span></a>
+      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">0</span></a>
       <div class="sidebar-section-label">Account</div>
       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
@@ -339,6 +344,18 @@ function refreshMyTicketsBadge() {
   const badge = document.querySelector('.nav-link[data-page="my-tickets"] .nav-badge');
   if (badge) {
     badge.textContent = String(APP.tickets.length || 0);
+  }
+}
+
+function refreshWorkerJobsBadge() {
+  const badge = document.getElementById('worker-jobs-badge');
+  if (badge && APP.currentUser?.id) {
+    const activeJobs = APP.tickets.filter(t => 
+      String(t.technician_id) === String(APP.currentUser.id) && 
+      t.status !== 'completed'
+    ).length;
+    
+    badge.textContent = String(activeJobs);
   }
 }
 
@@ -478,23 +495,68 @@ function renderMyTickets() {
 }
 
 function renderWorkerDashboard() {
-  const assigned = APP.tickets.filter(t=>t.worker==='Musa Dlamini');
+const assigned = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);  const activeStatus = APP.currentUser.technician_status || 'Active';
+
+  const totalAssigned = assigned.length;
+  const pendingCount  = assigned.filter(t => t.status === 'pending' || t.status === 'assigned').length;
+  const progressCount = assigned.filter(t => t.status === 'inprogress').length;
+  const completedCount = assigned.filter(t => t.status === 'completed').length;
   return `
   <div class="page-header">
     <div>
       <div class="page-title">Worker Dashboard</div>
-      <div class="page-subtitle">Good morning, ${APP.currentUser.name}. Overview.</div>
+      <div class="page-subtitle">Hello, ${APP.currentUser.name}.  Overview.</div>
     </div>
   </div>
+
+  <div class="card" style="margin-bottom: 1.5rem;">
+    <div class="card-header">
+      <span class="card-title">⚙️ Duty Operational Status</span>
+    </div>
+    <div class="card-body">
+      <div class="form-group" style="max-width: 400px; margin: 0;">
+        <label class="form-label">Set Your Current Field State:</label>
+        <select id="tech-availability-select" class="form-control" onchange="handleUpdateAvailability(this.value)">
+          <option value="Active" ${activeStatus === 'Active' ? 'selected' : ''}>Active / Available on Field</option>
+          <option value="Inactive" ${activeStatus === 'Inactive' ? 'selected' : ''}>Inactive / Off-Duty</option>
+          <option value="On Leave" ${activeStatus === 'On Leave' ? 'selected' : ''}>On Leave</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom: 1.5rem;">
+    <div class="stat-card">
+      <div class="stat-number">${totalAssigned}</div>
+      <div class="stat-label">Total Assigned</div>
+    </div>
+    <div class="stat-card orange">
+      <div class="stat-number">${pendingCount}</div>
+      <div class="stat-label">Pending</div>
+    </div>
+    <div class="stat-card blue">
+      <div class="stat-number">${progressCount}</div>
+      <div class="stat-label">In Progress</div>
+    </div>
+    <div class="stat-card green">
+      <div class="stat-number">${completedCount}</div>
+      <div class="stat-label">Completed</div>
+    </div>
+  </div>
+
   <div class="card">
     <div class="card-body">
       <div class="ticket-list">
-        ${assigned.map(t=>`
-        <div class="ticket-item" onclick="navigate('assigned-jobs')">
-          <div class="ticket-icon ${t.category.toLowerCase()}">${catIcon(t.category)}</div>
+        ${assigned.length === 0 ? `
+          <div style="text-align: center; color: var(--muted); padding: 1.5rem;">
+            ⚙️ No work orders currently assigned to your account.
+          </div>
+        ` : assigned.map(t => `
+        <div class="ticket-item" onclick="navigate('assigned-jobs')" style="cursor: pointer;">
+          <div class="ticket-icon ${t.category ? t.category.toLowerCase() : 'other'}">${catIcon(t.category)}</div>
           <div class="ticket-info">
-            <div class="ticket-title">${t.title}</div>
-            <div class="ticket-meta">📍 ${t.location}</div>
+            <div class="ticket-title">${t.title || 'Untitled Job'}</div>
+            <div class="ticket-meta">📍 ${t.location || 'Johannesburg'}</div>
           </div>
           <div class="ticket-right">${statusBadge(t.status)}</div>
         </div>`).join('')}
@@ -504,8 +566,7 @@ function renderWorkerDashboard() {
 }
 
 function renderAssignedJobs() {
-  const myJobs = APP.tickets.filter(t=>t.worker==='Musa Dlamini');
-  return `
+  const myJobs = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);  return `
   <div class="page-header"><div><div class="page-title">My Assigned Tasks</div></div></div>
   <div class="card">
     <div class="card-body" style="padding:0">
@@ -541,6 +602,14 @@ function updateJobStatus(id, newStatus) {
   if(t) {
     t.status = newStatus;
     showToast(`Task ${id} moved to status: ${newStatus}`, 'success');
+    
+    refreshWorkerJobsBadge(); 
+    refreshMyTicketsBadge();
+    
+    if (APP.currentPage === 'assigned-jobs') {
+      const main = document.getElementById('main-content');
+      if (main) main.innerHTML = `<div class="page">${renderAssignedJobs()}</div>`;
+    }
   }
 }
 
@@ -552,8 +621,133 @@ function renderAllTickets() { return `<div class="card"><div class="card-body"><
 function renderAssignWorker() { return `<div class="card"><div class="card-body"><h3>Assign Contractor Task Matrix</h3></div></div>`; }
 function renderManageUsers() { return `<div class="card"><div class="card-body"><h3>User Accounts Database Manager</h3></div></div>`; }
 function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
-function renderNotifications() { return `<div class="card"><div class="card-body"><h3>Civic Notifications Broadcasts</h3></div></div>`; }
-function renderProfile() { return `<div class="card"><div class="card-body"><h3>Account Identity Settings Profile</h3></div></div>`; }
+function renderNotifications() {
+  const isWorker = APP.currentRole === 'worker';
+  
+  // Data relevant to the specific user
+  const myRelevantData = APP.tickets.filter(t => 
+    isWorker ? String(t.technician_id) === String(APP.currentUser.id) : t.user_id == APP.currentUser.id
+  );
+
+  // ── WORKER NOTIFICATION LOGIC ─────────────────────────────
+  if (isWorker) {
+    const emergencyAssignments = myRelevantData.filter(t => t.priority === 'high' && t.status !== 'completed');
+    const confirmedDoneJobs = myRelevantData.filter(t => t.status === 'completed');
+
+    return `
+      <div class="page-header">
+        <div><div class="page-title">Notifications Hub</div></div>
+      </div>
+      ${emergencyAssignments.length > 0 ? `
+        <div class="card" style="margin-bottom: 2rem; border-left: 8px solid #E53E3E;">
+          <div class="card-body">
+            <strong>🚨 EMERGENCY DISPATCH:</strong> You have ${emergencyAssignments.length} high-priority fault(s).
+            <button class="btn btn-danger" onclick="navigate('assigned-jobs')">Open Work Orders</button>
+          </div>
+        </div>` : '<div class="card"><div class="card-body">✅ No critical emergencies.</div></div>'}
+      
+      <div class="card">
+        <div class="card-header">🔄 Administrative Job Closures</div>
+        <div class="card-body">
+          ${confirmedDoneJobs.map(job => `
+            <div style="padding: 1rem; border-bottom: 1px solid #eee;">
+              ✅ Administrator confirmed and closed Ticket <strong>${job.id}</strong>: "${job.title}"
+            </div>`).join('') || 'No confirmed resolved jobs.'}
+        </div>
+      </div>`;
+  }
+
+  // ── CITIZEN NOTIFICATION LOGIC ────────────────────────────
+  const completedComplaints = myRelevantData.filter(t => t.status === 'completed');
+
+  return `
+    <div class="page-header">
+      <div class="page-title">My Notifications</div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        ${completedComplaints.length === 0 ? `
+          <div style="text-align: center; padding: 2rem; color: #718096;">
+            No new updates on your reports yet.
+          </div>
+        ` : completedComplaints.map(t => `
+          <div style="padding: 1.5rem; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 1rem;">
+            <div style="font-size: 1.5rem;">✅</div>
+            <div>
+              <div style="font-weight: 700; font-size: 1.1rem;">Your work is done</div>
+              <div style="color: #4A5568;">
+                Your report for <strong>${t.title}</strong> (ID: ${t.id}) has been successfully resolved.
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>`;
+}
+
+function renderProfile() {
+  const user = APP.currentUser;
+  if (!user) {
+    return `<div class="card"><div class="card-body"><p>No active session found.</p></div></div>`;
+  }
+
+  const isWorker = APP.currentRole === 'worker';
+  
+  // Logic for the color-coded status badge (Worker Only)
+  let statusSection = '';
+  if (isWorker) {
+    const currentStatus = user.technician_status || 'Active';
+    let statusBadgeColor = '#38A169'; // Green (Active)
+    if (currentStatus === 'Inactive') statusBadgeColor = '#718096'; // Grey
+    if (currentStatus === 'On Leave') statusBadgeColor = '#DD6B20'; // Orange
+    
+    statusSection = `
+      <div style="display: inline-block; margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: ${statusBadgeColor}; color: white; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">
+        ● ${currentStatus}
+      </div>`;
+  }
+
+  // Professional details
+  let professionalDetails = '';
+  if (isWorker) {
+    professionalDetails = `
+      <div class="detail-row"><label>Employee ID:</label> <span>#${user.id || 'EMP-000'}</span></div>
+      <div class="detail-row"><label>Operational Status:</label> <span>${user.technician_status || 'Active'}</span></div>
+    `;
+  } else {
+    professionalDetails = `
+      <div class="detail-row"><label>Account Type:</label> <span>Registered Citizen</span></div>
+      <div class="detail-row"><label>Region:</label> <span>City of Johannesburg</span></div>
+    `;
+  }
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">User Profile</div>
+      <div class="page-subtitle">Personal account information and system credentials.</div>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
+    <div class="card" style="text-align: center; padding: 2rem;">
+      <div style="width: 90px; height: 90px; background: var(--navy); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 0 auto 0.5rem auto;">
+        ${user.initials}
+      </div>
+      <h3 style="margin: 0;">${user.name}</h3>
+      <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem;">${user.email}</p>
+      ${statusSection}
+    </div>
+
+    <div class="card">
+      <div class="card-header"><span class="card-title">Credentials</span></div>
+      <div class="card-body" style="display: flex; flex-direction: column; gap: 1rem;">
+        ${professionalDetails}
+      </div>
+    </div>
+  </div>
+  `;
+}
 
 // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
 function showTicketDetail(ticketId) {
@@ -601,6 +795,7 @@ function bindPageEvents(page) {
 }
 
 function formatTicketRow(row) {
+  
   return {
     id: row.id && String(row.id).startsWith('TK-') ? String(row.id) : `TK-${row.id}`,
     title: row.title || '',
@@ -610,6 +805,7 @@ function formatTicketRow(row) {
     priority: (String(row.priority || 'medium')).toLowerCase(),
     date: row.date ? String(row.date).split('T')[0] : '',
     worker: row.worker || null,
+    technician_id: row.technician_id || null,
     desc: row.description || row.desc || ''
   };
 }
@@ -637,7 +833,13 @@ async function loadUserTickets() {
   }
 
   try {
-    const res = await fetch(`${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`);
+    let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`;
+    
+    if (APP.currentRole === 'worker') {
+      endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.id)}`;
+    }
+
+    const res = await fetch(endpoint);
     const data = await res.json();
     if (data.success && Array.isArray(data.tickets)) {
       APP.tickets = data.tickets.map(formatTicketRow);
@@ -650,6 +852,7 @@ async function loadUserTickets() {
   }
 
   refreshMyTicketsBadge();
+  refreshWorkerJobsBadge();
 }
 
 async function submitTicket() {
@@ -690,5 +893,60 @@ function logout() {
   APP.currentUser = null; APP.currentRole = null;
   showScreen('home-screen');
   showToast('You have been logged out.', 'info');
+}
+
+// Updates the technician's availability status locally and syncs it with the server backend
+async function handleUpdateAvailability(newStatus) {
+  //Update local memory state immediately so the change persists across dashboard tabs
+  if (APP.currentUser) {
+    APP.currentUser.technician_status = newStatus;
+  }
+
+  //Trigger built-in system notification popup alert
+  if (typeof showToast === 'function') {
+    showToast(`Duty status updated to: ${newStatus}`, 'success');
+  } else {
+    alert(`Duty status updated to: ${newStatus}`);
+  }
+
+  //Background network sync
+  try {
+    const response = await fetch('http://105.228.61.32:3000/technician/status', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        userId: APP.currentUser?.id || null,
+        email: APP.currentUser?.email || '',
+        status: newStatus,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('Backend rejected status sync, but local state preserved.', response.statusText);
+    }
+  } catch (error) {
+    // Fails silently in the background so the app keeps working perfectly even if offline
+    console.error('Network error updating status to background API server:', error);
+  }
+}
+
+//Fetching the ticket from db
+async function fetchTicketsForWorker() {
+  if (!APP.currentUser) return; 
+
+  try {
+    const response = await fetch(`http://105.228.61.32:3000/api/tickets?techId=${APP.currentUser.id}`);
+    const data = await response.json();
+    
+    // Update the global state
+    APP.tickets = data; 
+    
+    renderCurrentPage(); 
+  } catch (err) {
+    console.error("Database sync failed:", err);
+  }
 }
 
