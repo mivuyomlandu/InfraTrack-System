@@ -69,6 +69,29 @@ app.post('/upload-picture', upload.single('picture'), async (req, res) => {
   }
 });
 
+app.get('/picture/:ticket_id/:user_id', async (req, res) => {
+  const { ticket_id, user_id } = req.params;
+
+  try {
+    const filesCollection = db.collection('ticket_images.files');
+    const file = await filesCollection.findOne({
+      'metadata.ticket_id': String(ticket_id),
+      'metadata.user_id': String(user_id)
+    });
+
+    if (!file) {
+      return res.status(404).json({ success: false, message: 'Picture not found.' });
+    }
+
+    const downloadStream = bucket.openDownloadStream(file._id);
+    res.setHeader('Content-Type', file.contentType || 'image/jpeg');
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error('Picture fetch error:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to retrieve picture.' });
+  }
+});
+
 app.listen(PORT, async () => {
   try {
     await initMongo();

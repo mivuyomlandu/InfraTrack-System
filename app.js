@@ -861,9 +861,21 @@ function renderProfile() {
 }
 
 // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
-function showTicketDetail(ticketId) {
+async function showTicketDetail(ticketId) {
   const ticket = APP.tickets.find(t => t.id === ticketId);
   if (!ticket) return;
+
+  let imageHtml = '';
+  try {
+    const ticketNumId = String(ticketId).replace(/^TK-/, '');
+    const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${APP.currentUser?.id}`;
+    const checkRes = await fetch(imageUrl);
+    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+      imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+    }
+  } catch (err) {
+    console.log('No image for ticket', ticketId);
+  }
 
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
@@ -883,6 +895,7 @@ function showTicketDetail(ticketId) {
              <strong>Description:</strong><br>
              <span style="font-size:0.9rem;">${ticket.desc || 'No details provided.'}</span>
           </div>
+          ${imageHtml}
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" onclick="closeTicketModal()">Close Window</button>
