@@ -601,8 +601,9 @@ function bindPageEvents(page) {
 }
 
 function formatTicketRow(row) {
+  const ticketId = row.ticket_id || row.id || '';
   return {
-    id: row.id && String(row.id).startsWith('TK-') ? String(row.id) : `TK-${row.id}`,
+    id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
     title: row.title || '',
     category: row.category || row.asset_type || 'Other',
     location: row.location || `${row.street || ''}${row.suburb ? ', ' + row.suburb : ''}`.trim(),
