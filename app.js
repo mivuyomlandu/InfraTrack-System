@@ -6,19 +6,14 @@
 'use strict';
 
 // ── STATE ─────────────────────────────────────────────────────
+const API_URL = "http://105.228.61.32:3000";
+
 const APP = {
   currentUser: null,
   currentRole: null,
   currentPage: null,
   locations: [],
-  tickets: [
-    { id:'TK-2401', title:'Burst Water Pipe', category:'Water', location:'Soweto, Sector 4', status:'inprogress', priority:'high',  date:'2026-05-14', worker:'M. Dlamini', desc:'Major burst on Vilakazi St, flooding pavement.' },
-    { id:'TK-2398', title:'Pothole – Main Reef Rd', category:'Road',    location:'Johannesburg CBD',   status:'assigned',   priority:'high',  date:'2026-05-13', worker:'T. Nkosi',   desc:'Large pothole causing vehicle damage.' },
-    { id:'TK-2395', title:'Faulty Street Light',   category:'Electric', location:'Sandton, Rivonia',   status:'pending',    priority:'medium',date:'2026-05-12', worker:null,         desc:'Street light out for 3 nights.' },
-    { id:'TK-2390', title:'Illegal Dumping Site',  category:'Other',    location:'Alexandra Township', status:'completed',  priority:'low',   date:'2026-05-10', worker:'J. Sithole', desc:'Waste cleared and area sanitized.' },
-    { id:'TK-2388', title:'Storm Drain Blocked',   category:'Water',    location:'Roodepoort',         status:'pending',    priority:'medium',date:'2026-05-09', worker:null,         desc:'Drain causing flooding in street.' },
-    { id:'TK-2385', title:'Broken Traffic Light',  category:'Electric', location:'Braamfontein',       status:'assigned',   priority:'high',  date:'2026-05-08', worker:'M. Dlamini', desc:'Traffic light at Jorissen/Jan Smuts.' },
-  ],
+  tickets: [],
   workers: [
     { id:'W001', name:'Musa Dlamini',    dept:'Water & Sanitation', active:3 },
     { id:'W002', name:'Thabo Nkosi',     dept:'Roads & Transport',  active:2 },
@@ -131,7 +126,7 @@ async function navigate(page) {
 }
 
 // ── LANDING HOME EVENT HANDLERS ───────────────────────────────
-function handleHomeTrackTicket() {
+async function handleHomeTrackTicket() {
   const ticketInput = document.getElementById('home-track-id');
   const idValue = ticketInput ? ticketInput.value.trim().toUpperCase() : '';
   
@@ -143,8 +138,23 @@ function handleHomeTrackTicket() {
   const foundTicket = APP.tickets.find(t => t.id === idValue);
   if (foundTicket) {
     showTicketDetail(foundTicket.id);
-  } else {
-    showToast(`No logged infrastructure ticket was found matching code "${idValue}".`, 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/id/${encodeURIComponent(idValue)}`);
+    const data = await res.json();
+
+    if (data.success && data.ticket) {
+      const ticket = formatTicketRow(data.ticket);
+      APP.tickets.unshift(ticket);
+      showTicketDetail(ticket.id);
+    } else {
+      showToast(`No logged infrastructure ticket was found matching code "${idValue}".`, 'error');
+    }
+  } catch (err) {
+    console.error('Ticket lookup error', err);
+    showToast('Unable to reach the ticket service. Please try again later.', 'error');
   }
 }
 
@@ -270,7 +280,7 @@ function initGlobalAuthHandlers() {
   }
 }
 // ── LOAD APP SHELL ─────────────────────────────────────────────
-function loadApp() {
+async function loadApp() {
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('signup-screen').classList.add('hidden');
   document.getElementById('home-screen').classList.add('hidden');
@@ -279,7 +289,8 @@ function loadApp() {
   document.getElementById('user-name').textContent = APP.currentUser.name;
   document.getElementById('user-initials').textContent = APP.currentUser.initials;
 
-  loadLocations();
+  await loadLocations();
+  await loadUserTickets();
   buildSidebar();
 
   const defaultPage = {
@@ -293,11 +304,12 @@ function loadApp() {
 // ── SIDEBAR BUILDER ────────────────────────────────────────────
 function buildSidebar() {
   const sidebar = document.getElementById('sidebar');
+  const ticketCount = APP.tickets.length || 0;
   const navs = {
     citizen: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-citizen"><span class="icon">🏠</span>Dashboard</a>
-      <a class="nav-link" data-page="my-tickets"><span class="icon">🎫</span>My Tickets <span class="nav-badge">3</span></a>
+      <a class="nav-link" data-page="my-tickets"><span class="icon">🎫</span>My Tickets <span class="nav-badge">${ticketCount}</span></a>
       <a class="nav-link" data-page="create-ticket"><span class="icon">➕</span>New Ticket</a>
       <div class="sidebar-section-label">Account</div>
       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
@@ -322,10 +334,15 @@ function buildSidebar() {
   };
   sidebar.innerHTML = navs[APP.currentRole];
   sidebar.querySelectorAll('.nav-link').forEach(l => {
-  l.addEventListener('click', async () => {
-    await navigate(l.dataset.page);
+    l.addEventListener('click', () => navigate(l.dataset.page));
   });
-});
+}
+
+function refreshMyTicketsBadge() {
+  const badge = document.querySelector('.nav-link[data-page="my-tickets"] .nav-badge');
+  if (badge) {
+    badge.textContent = String(APP.tickets.length || 0);
+  }
 }
 
 // ── PAGE RENDERS ───────────────────────────────────────────────
@@ -693,11 +710,25 @@ function bindPageEvents(page) {
   }
 }
 
+function formatTicketRow(row) {
+  const ticketId = row.ticket_id || row.id || '';
+  return {
+    id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
+    title: row.title || '',
+    category: row.category || row.asset_type || 'Other',
+    location: row.location || `${row.street || ''}${row.suburb ? ', ' + row.suburb : ''}`.trim(),
+    status: row.status || 'pending',
+    priority: (String(row.priority || 'medium')).toLowerCase(),
+    date: row.date ? String(row.date).split('T')[0] : '',
+    worker: row.worker || null,
+    desc: row.description || row.desc || ''
+  };
+}
+
 async function loadLocations() {
   if (APP.locations.length > 0) return;
   
   try {
-    const API_URL = "http://105.228.61.32:3000"; //105.228.61.32
     const res = await fetch(`${API_URL}/locations`);
     const data = await res.json();
     
@@ -707,6 +738,29 @@ async function loadLocations() {
   } catch (err) {
     console.error('Error loading locations:', err);
   }
+}
+
+async function loadUserTickets() {
+  if (!APP.currentUser?.id) {
+    APP.tickets = [];
+    refreshMyTicketsBadge();
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.tickets)) {
+      APP.tickets = data.tickets.map(formatTicketRow);
+    } else {
+      APP.tickets = [];
+    }
+  } catch (err) {
+    console.error('Error loading user tickets:', err);
+    APP.tickets = [];
+  }
+
+  refreshMyTicketsBadge();
 }
 
 async function submitTicket() {
@@ -732,9 +786,9 @@ async function submitTicket() {
       return;
     }
 
-    const newId = data.id ? `TK-${data.id}` : 'TK-' + (2402 + APP.tickets.length);
-    APP.tickets.unshift({ id:newId, title, category:cat, location:loc, status:'pending', priority:pri.toLowerCase(), date:new Date().toISOString().split('T')[0], worker:null, desc });
-    showToast(`🎉 Ticket ${newId} submitted!`,'success');
+    showToast(`🎉 Ticket submitted!`, 'success');
+    await loadUserTickets();
+    refreshMyTicketsBadge();
     setTimeout(() => navigate('my-tickets'), 800);
   } catch (err) {
     console.error('Submit ticket error', err);
