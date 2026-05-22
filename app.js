@@ -403,10 +403,7 @@ function renderCitizenDashboard() {
 }
 
 function renderCreateTicket() {
-  const locOptions = APP.locations.map(loc => {
-    const displayText = `${loc.street}, ${loc.suburb}`;
-    return `<option value="${displayText}">${displayText}</option>`;
-  }).join('');
+  const locOptions = buildLocationOptions('');
   
   return `
   <div class="page-header">
@@ -442,8 +439,7 @@ function renderCreateTicket() {
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Location / Address *</label>
-            <select class="form-control" id="t-loc" required>
-              <option value="">— Select Location —</option>
+            <select class="form-control" id="t-loc" required disabled>
               ${locOptions}
             </select>
           </div>
@@ -901,6 +897,11 @@ function bindPageEvents(page) {
   if (page === 'create-ticket') {
     const form = document.getElementById('create-ticket-form');
     if (form) form.addEventListener('submit', e => { e.preventDefault(); submitTicket(); });
+
+    const categorySelect = document.getElementById('t-cat');
+    if (categorySelect) {
+      categorySelect.addEventListener('change', () => updateLocationOptions(categorySelect.value));
+    }
   }
 }
 
@@ -921,6 +922,36 @@ function formatTicketRow(row) {
   };
 }
 
+function filterLocationsByCategory(category) {
+  if (!category) return [];
+  return APP.locations.filter(loc => Array.isArray(loc.asset_types) && loc.asset_types.includes(category));
+}
+
+function buildLocationOptions(category) {
+  const availableLocations = filterLocationsByCategory(category);
+  if (!category) {
+    return `<option value="">— Select Category First —</option>`;
+  }
+  if (availableLocations.length === 0) {
+    return `<option value="">No locations available for selected category</option>`;
+  }
+
+  return [`
+    <option value="">— Select Location —</option>`,
+    ...availableLocations.map(loc => {
+      const displayText = `${loc.street}, ${loc.suburb}`;
+      return `<option value="${displayText}">${displayText}</option>`;
+    })
+  ].join('');
+}
+
+function updateLocationOptions(category) {
+  const locationSelect = document.getElementById('t-loc');
+  if (!locationSelect) return;
+  locationSelect.innerHTML = buildLocationOptions(category);
+  locationSelect.disabled = !category || filterLocationsByCategory(category).length === 0;
+}
+
 async function loadLocations() {
   if (APP.locations.length > 0) return;
   
@@ -929,7 +960,12 @@ async function loadLocations() {
     const data = await res.json();
     
     if (data.success) {
-      APP.locations = data.locations;
+      APP.locations = data.locations.map(loc => ({
+        ...loc,
+        asset_types: Array.isArray(loc.asset_types)
+          ? loc.asset_types
+          : String(loc.asset_types || '').split(',').map(s => s.trim()).filter(Boolean)
+      }));
     }
   } catch (err) {
     console.error('Error loading locations:', err);

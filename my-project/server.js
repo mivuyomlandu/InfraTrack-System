@@ -53,15 +53,33 @@ app.get("/users", (req, res) => {
 });
 
 app.get("/locations", (req, res) => {
-  const sql = "SELECT location_id, street, suburb FROM location ORDER BY suburb ASC, street ASC";
+  const sql = `
+    SELECT
+      l.location_id,
+      l.street,
+      l.suburb,
+      GROUP_CONCAT(DISTINCT COALESCE(a.asset_type, 'Other') ORDER BY COALESCE(a.asset_type, 'Other') SEPARATOR ',') AS asset_types
+    FROM location l
+    INNER JOIN asset a ON l.location_id = a.location_id
+    GROUP BY l.location_id
+    ORDER BY l.suburb ASC, l.street ASC
+  `;
+
   db.query(sql, (err, result) => {
     if (err) {
       return res.status(500).json({ success: false, message: err.message });
     }
 
+    const locations = result.map(row => ({
+      location_id: row.location_id,
+      street: row.street,
+      suburb: row.suburb,
+      asset_types: row.asset_types ? row.asset_types.split(',').map(type => type.trim()) : []
+    }));
+
     res.json({
       success: true,
-      locations: result
+      locations
     });
   });
 });
