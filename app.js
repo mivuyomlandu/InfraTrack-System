@@ -436,6 +436,11 @@ function renderCreateTicket() {
           <label class="form-label">Description *</label>
           <textarea class="form-control" id="t-desc" placeholder="Describe the issue in detail..." rows="4"></textarea>
         </div>
+        <div class="form-group">
+          <label class="form-label">Upload Picture</label>
+          <input class="form-control" id="t-image" type="file" accept="image/*">
+          <div class="form-help">Optional: attach a photo of the issue to help triage the ticket.</div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Location / Address *</label>
@@ -1002,10 +1007,29 @@ async function loadUserTickets() {
   refreshWorkerJobsBadge();
 }
 
+async function uploadTicketImage(ticketId, file) {
+  const formData = new FormData();
+  formData.append('picture', file);
+  formData.append('ticket_id', ticketId);
+  formData.append('user_id', APP.currentUser?.id || '');
+
+  try {
+    const res = await fetch('http://105.228.61.32:3001/upload-picture', {
+      method: 'POST',
+      body: formData
+    });
+    return await res.json();
+  } catch (err) {
+    console.error('Image upload error', err);
+    return { success: false, message: 'Unable to upload ticket image.' };
+  }
+}
+
 async function submitTicket() {
   const title = document.getElementById('t-title')?.value.trim();
   const cat   = document.getElementById('t-cat')?.value;
   const desc  = document.getElementById('t-desc')?.value.trim();
+  const imageFile = document.getElementById('t-image')?.files?.[0] || null;
   const loc   = document.getElementById('t-loc')?.value.trim();
   const pri   = (document.getElementById('t-priority')?.value || 'Medium');
   if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
@@ -1025,7 +1049,20 @@ async function submitTicket() {
       return;
     }
 
-    showToast(`🎉 Ticket submitted!`, 'success');
+    let message = '🎉 Ticket submitted!';
+    let toastType = 'success';
+
+    if (imageFile) {
+      const uploadResult = await uploadTicketImage(data.id, imageFile);
+      if (!uploadResult.success) {
+        message = uploadResult.message || 'Ticket created, but image upload failed.';
+        toastType = 'warning';
+      } else {
+        message = '🎉 Ticket and picture uploaded successfully!';
+      }
+    }
+
+    showToast(message, toastType);
     await loadUserTickets();
     refreshMyTicketsBadge();
     setTimeout(() => navigate('my-tickets'), 800);
