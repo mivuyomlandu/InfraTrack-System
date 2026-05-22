@@ -99,7 +99,7 @@ function catIcon(c) {
 }
 
 // ── INNER APP ROUTER ──────────────────────────────────────────
-function navigate(page) {
+async function navigate(page) {
   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
   const link = document.querySelector(`.nav-link[data-page="${page}"]`);
   if (link) link.classList.add('active');
@@ -124,7 +124,8 @@ function navigate(page) {
   };
 
   if (renders[page]) {
-    main.innerHTML = `<div class="page">${renders[page]()}</div>`;
+    const result = await renders[page]();
+    main.innerHTML = `<div class="page">${result}</div>`;
     bindPageEvents(page);
   }
 }
@@ -157,6 +158,8 @@ function handleGuestLogTicket() {
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
   const API_URL = "http://105.228.61.32:3000";
+
+  //105.228.61.32
 
   // =========================
   // LOGIN HANDLER
@@ -217,13 +220,13 @@ function initGlobalAuthHandlers() {
       const name = document.getElementById('signup-name').value.trim();
       const surname = document.getElementById('signup-surname').value.trim();
       const email = document.getElementById('signup-email').value.trim();
-      const phone = document.getElementById('signup-phone').value.trim();
+      const cellphone = document.getElementById('signup-cellphone').value.trim();
       const password = document.getElementById('signup-password').value.trim();
       const errEl = document.getElementById('signup-error');
 
       errEl.classList.add('hidden');
 
-      if (!role || !name || !surname || !email || !phone || !password) {
+      if (!role || !name || !surname || !email || !cellphone || !password) {
         errEl.textContent = 'All fields are required.';
         errEl.classList.remove('hidden');
         return;
@@ -238,7 +241,7 @@ function initGlobalAuthHandlers() {
             name,
             surname,
             email,
-            phone,
+            cellphone,
             password
           })
         });
@@ -319,8 +322,10 @@ function buildSidebar() {
   };
   sidebar.innerHTML = navs[APP.currentRole];
   sidebar.querySelectorAll('.nav-link').forEach(l => {
-    l.addEventListener('click', () => navigate(l.dataset.page));
+  l.addEventListener('click', async () => {
+    await navigate(l.dataset.page);
   });
+});
 }
 
 // ── PAGE RENDERS ───────────────────────────────────────────────
@@ -529,9 +534,116 @@ function renderAdminDashboard() {
   return `<div class="page-header"><div><div class="page-title">Admin Command Console</div></div></div>`;
 }
 
-function renderAllTickets() { return `<div class="card"><div class="card-body"><h3>All System Tickets Grid</h3></div></div>`; }
+async function renderAllTickets() {
+  try {
+    const res = await fetch("http://105.228.61.32:3000/tickets");
+    const data = await res.json();
+
+    if (!data || !Array.isArray(data)) {
+      return `<div class="card"><div class="card-body">Failed to load tickets.</div></div>`;
+    }
+
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">All Tickets</div>
+        <div class="page-subtitle">Every submitted infrastructure ticket in the system (${data.length} total)</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Ticket ID</th>
+                <th>Title</th>
+                <th>Description</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Asset ID</th>
+                <th>User ID</th>
+                <th>Date Created</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` : 
+                data.map(t => `
+                <tr>
+                  <td style="font-weight:700;color:var(--navy)">${t.id}</td>
+                  <td>${t.title || '-'}</td>
+                  <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description || '-'}</td>
+                  <td>${priorityHtml(t.priority || 'medium')}</td>
+                  <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : 'completed')}</td>
+                  <td>${t.asset_id || '-'}</td>
+                  <td>${t.user_id || '-'}</td>
+                  <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  } catch (err) {
+    console.error('renderAllTickets error:', err);
+    return `<div class="card"><div class="card-body">Server error: ${err.message}</div></div>`;
+  }
+}
 function renderAssignWorker() { return `<div class="card"><div class="card-body"><h3>Assign Contractor Task Matrix</h3></div></div>`; }
-function renderManageUsers() { return `<div class="card"><div class="card-body"><h3>User Accounts Database Manager</h3></div></div>`; }
+async function renderManageUsers() {
+  try {
+    const res = await fetch("http://105.228.61.32:3000/users");
+    const data = await res.json();
+
+    if (!data.success) {
+      return `<div class="card"><div class="card-body">Failed to load users.</div></div>`;
+    }
+
+    return `
+    <div class="page-header">
+      <div>
+        <div class="page-title">Manage Users</div>
+        <div class="page-subtitle">All registered system users (${data.users.length} total)</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="padding:0">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Surname</th>
+                <th>Email</th>
+                <th>Cellphone</th>
+                <th>Password</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.users.map(u => `
+                <tr>
+                  <td style="font-weight:700;color:var(--navy)">${u.user_id}</td>
+                  <td>${u.name}</td>
+                  <td>${u.surname}</td>
+                  <td>${u.email}</td>
+                  <td>${u.cellphone || '-'}</td>
+                  <td>${u.password}</td>
+                  <td>${u.role}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>`;
+
+  } catch (err) {
+    return `<div class="card"><div class="card-body">Server error loading users.</div></div>`;
+  }
+}
 function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
 function renderNotifications() { return `<div class="card"><div class="card-body"><h3>Civic Notifications Broadcasts</h3></div></div>`; }
 function renderProfile() { return `<div class="card"><div class="card-body"><h3>Account Identity Settings Profile</h3></div></div>`; }
@@ -585,7 +697,7 @@ async function loadLocations() {
   if (APP.locations.length > 0) return;
   
   try {
-    const API_URL = "http://105.228.61.32:3000";
+    const API_URL = "http://105.228.61.32:3000"; //105.228.61.32
     const res = await fetch(`${API_URL}/locations`);
     const data = await res.json();
     
