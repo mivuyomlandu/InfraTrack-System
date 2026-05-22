@@ -53,15 +53,33 @@ app.get("/users", (req, res) => {
 });
 
 app.get("/locations", (req, res) => {
-  const sql = "SELECT location_id, street, suburb FROM location ORDER BY suburb ASC, street ASC";
+  const sql = `
+    SELECT
+      l.location_id,
+      l.street,
+      l.suburb,
+      GROUP_CONCAT(DISTINCT COALESCE(a.asset_type, 'Other') ORDER BY COALESCE(a.asset_type, 'Other') SEPARATOR ',') AS asset_types
+    FROM location l
+    INNER JOIN asset a ON l.location_id = a.location_id
+    GROUP BY l.location_id
+    ORDER BY l.suburb ASC, l.street ASC
+  `;
+
   db.query(sql, (err, result) => {
     if (err) {
       return res.status(500).json({ success: false, message: err.message });
     }
 
+    const locations = result.map(row => ({
+      location_id: row.location_id,
+      street: row.street,
+      suburb: row.suburb,
+      asset_types: row.asset_types ? row.asset_types.split(',').map(type => type.trim()) : []
+    }));
+
     res.json({
       success: true,
-      locations: result
+      locations
     });
   });
 });
@@ -100,6 +118,42 @@ app.get("/tickets/user/:user_id", (req, res) => {
   `;
 
   db.query(sql, [req.params.user_id], (err, result) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    res.json({ success: true, tickets: result });
+  });
+});
+
+// ────────────────────────────────────────────
+// 🎫 GET TICKETS BY TECHNICIAN (For Worker Dashboard)
+// ────────────────────────────────────────────
+app.get("/tickets/technician/:tech_id", (req, res) => {
+  const sql = `
+    SELECT
+      t.ticket_id AS id,
+      t.title,
+      t.description,
+      t.priority,
+      CASE 
+        WHEN t.status_id = 1 THEN 'pending'
+        WHEN t.status_id = 2 THEN 'assigned'
+        WHEN t.status_id = 3 THEN 'inprogress'
+        WHEN t.status_id = 4 THEN 'completed'
+        ELSE 'pending'
+      END AS status,
+      DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
+      COALESCE(a.asset_type, 'Other') AS category,
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
+      t.technician_id
+    FROM ticket t
+    LEFT JOIN asset a ON t.asset_id = a.asset_id
+    LEFT JOIN location l ON a.location_id = l.location_id
+    WHERE t.technician_id = ?
+    ORDER BY t.ticket_id DESC
+  `;
+
+  db.query(sql, [req.params.tech_id], (err, result) => {
     if (err) {
       return res.status(500).json({ success: false, message: err.message });
     }
