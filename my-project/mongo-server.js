@@ -27,7 +27,7 @@ async function initMongo() {
 }
 
 app.post('/upload-picture', upload.single('picture'), async (req, res) => {
-  const { ticket_id, user_id } = req.body;
+  const { ticket_id, user_id, picture_type } = req.body;
   const file = req.file;
 
   if (!file) {
@@ -38,12 +38,14 @@ app.post('/upload-picture', upload.single('picture'), async (req, res) => {
     return res.status(400).json({ success: false, message: 'ticket_id and user_id are required.' });
   }
 
+  const normalizedType = String(picture_type || 'before').trim().toLowerCase();
   try {
     const uploadStream = bucket.openUploadStream(file.originalname, {
       contentType: file.mimetype,
       metadata: {
         ticket_id: String(ticket_id),
         user_id: String(user_id),
+        picture_type: normalizedType,
         uploaded_at: new Date().toISOString()
       }
     });
@@ -78,6 +80,32 @@ app.get('/picture/:ticket_id/:user_id', async (req, res) => {
       'metadata.ticket_id': String(ticket_id),
       'metadata.user_id': String(user_id)
     });
+
+    if (!file) {
+      return res.status(404).json({ success: false, message: 'Picture not found.' });
+    }
+
+    const downloadStream = bucket.openDownloadStream(file._id);
+    res.setHeader('Content-Type', file.contentType || 'image/jpeg');
+    downloadStream.pipe(res);
+  } catch (err) {
+    console.error('Picture fetch error:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to retrieve picture.' });
+  }
+});
+
+app.get('/picture/type/:ticket_id/:picture_type', async (req, res) => {
+  const { ticket_id, picture_type } = req.params;
+
+  try {
+    const filesCollection = db.collection('ticket_images.files');
+    const file = await filesCollection.findOne(
+      {
+        'metadata.ticket_id': String(ticket_id),
+        'metadata.picture_type': String(picture_type)
+      },
+      { sort: { uploadDate: -1 } }
+    );
 
     if (!file) {
       return res.status(404).json({ success: false, message: 'Picture not found.' });
