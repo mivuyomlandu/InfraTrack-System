@@ -24,7 +24,16 @@ db.connect(err => {
 
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
-  const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+  const sql = `
+  SELECT 
+    users.*,
+    technician.technician_status
+  FROM users
+  LEFT JOIN technician 
+    ON users.user_id = technician.user_id
+  WHERE users.email = ? 
+    AND users.password = ?
+`;
   db.query(sql, [email, password], (err, result) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.length > 0) {
@@ -41,6 +50,21 @@ app.post("/signup", (req, res) => {
   db.query(sql, [role, name, surname, email, cellphone, password], (err, result) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     res.json({ success: true, message: "User created" });
+  });
+});
+
+// Calling the route
+app.post("/user/update-status", (req, res) => {
+  const { userId, status } = req.body;
+  
+  const sql = "UPDATE technician SET technician_status = ? WHERE user_id = ?";
+  
+  db.query(sql, [status, userId], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    res.json({ success: true, message: "Status updated successfully" });
   });
 });
 
