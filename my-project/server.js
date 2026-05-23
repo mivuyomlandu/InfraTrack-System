@@ -290,6 +290,8 @@ app.get("/tickets", (req, res) => {
       t.priority,
       t.status_id,
       t.technician_id,
+      t.asset_id,
+      t.user_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date_created,
       COALESCE(a.asset_type, 'Other') AS asset_type,
       CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
