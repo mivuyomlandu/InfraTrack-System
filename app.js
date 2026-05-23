@@ -1845,15 +1845,15 @@ async function showTicketDetail(ticketId) {
 
       if (foundUrl) {
         imageBlocks.push(`
-          <div style="margin-top:1rem; text-align:center;">
+          <div style="flex:1 1 320px; min-width:280px; text-align:center;">
             <div style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem;">${candidate.label}</div>
-            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}" style="width:100%; height:auto; max-height:320px; object-fit:contain; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
           </div>`);
       }
     }
 
     if (imageBlocks.length > 0) {
-      imageHtml = imageBlocks.join('');
+      imageHtml = `<div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-top:1rem;">${imageBlocks.join('')}</div>`;
     } else {
       const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
       for (const ownerId of ownerIds) {
