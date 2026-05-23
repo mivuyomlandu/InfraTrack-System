@@ -57,6 +57,8 @@ function handleAuthSuccess(user, role) {
   const normalizedRole = normalizeRole(role);
   APP.currentUser = {
     id: user.user_id || null,
+    user_id: user.user_id || null,
+    technician_id: null,
     name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
     initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
     email: user.email || '',
@@ -287,12 +289,47 @@ async function loadApp() {
   document.getElementById('user-initials').textContent = APP.currentUser.initials;
 
   await loadLocations();
-  await loadUserTickets();
   try {
     await loadAppData();
   } catch (err) {
     console.error('loadAppData failed:', err);
   }
+
+  // If the logged-in user is a worker, try to resolve their technician record using multiple heuristics
+  try {
+    if (APP.currentRole === 'worker' && APP.currentUser && Array.isArray(APP.technicians)) {
+      const uid = String(APP.currentUser.id || APP.currentUser.user_id || '');
+      const uemail = (APP.currentUser.email || '').toLowerCase();
+      const uname = (APP.currentUser.name || '').toLowerCase();
+
+      const me = APP.technicians.find(t => {
+        // common possible fields linking technician -> user
+        const candUserIds = [t.user_id, t.userId, t.user?.user_id, t.user?.id, t.uid, t.user_id];
+        for (const cu of candUserIds) {
+          if (cu != null && String(cu) === uid) return true;
+        }
+
+        // try email
+        const te = (t.email || t.user_email || t.user?.email || '').toLowerCase();
+        if (te && uemail && te === uemail) return true;
+
+        // try name match
+        const tn = ((t.name || '') + ' ' + (t.surname || '')).toLowerCase().trim();
+        if (tn && uname && tn === uname) return true;
+
+        return false;
+      });
+
+      if (me) {
+        APP.currentUser.technician_id = me.technician_id != null ? String(me.technician_id) : (me.technicianId != null ? String(me.technicianId) : (me.id != null ? String(me.id) : null));
+        APP.currentUser.technician_status = me.technician_status || APP.currentUser.technician_status;
+      }
+    }
+  } catch (e) {
+    console.error('Could not resolve technician id for current user', e);
+  }
+
+  await loadUserTickets();
   buildSidebar();
 
   const defaultPage = {
@@ -351,7 +388,7 @@ function refreshMyTicketsBadge() {
 // FIX 1: changed APP.currentUser.user_id to APP.currentUser.id
 function refreshWorkerJobsBadge() {
   const badge = document.getElementById('worker-jobs-badge');
-  if (badge && APP.currentUser?.id) {
+  if (badge && APP.currentUser?.technician_id) {
     const activeJobs = APP.tickets.length;
     badge.textContent = String(activeJobs || 0);
   }
@@ -495,8 +532,7 @@ function renderMyTickets() {
 }
 
 function renderWorkerDashboard() {
-  // FIX 3: changed t.technician_id == APP.currentUser.user_id to APP.currentUser.id
-  const assigned = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);
+  const assigned = APP.tickets.filter(t => String(t.technician_id) === String(APP.currentUser.technician_id));
   const activeStatus = APP.currentUser.technician_status ?? 'Active';
   const totalAssigned = assigned.length;
   const pendingCount = assigned.filter(t => t.status === 'pending' || t.status === 'assigned').length;
@@ -597,8 +633,7 @@ async function handleUpdateAvailability(newStatus) {
 }
 
 function renderAssignedJobs() {
-  // FIX 5: changed APP.currentUser.user_id to APP.currentUser.id
-  const myJobs = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);
+  const myJobs = APP.tickets.filter(t => String(t.technician_id) === String(APP.currentUser.technician_id));
   return `
   <div class="page-header"><div><div class="page-title">My Assigned Tasks</div></div></div>
   <div class="card">
@@ -1026,6 +1061,7 @@ async function assignTicket(appId, rawId) {
     [ticketInAll, ticketInUser].forEach(t => {
       if (!t) return;
       t.worker = workerId;
+      t.technician_id = String(workerId);
       t.workerName = worker.name;
       t.status = 'assigned';
     });
@@ -1084,7 +1120,8 @@ async function loadAppData() {
             : t.status_id === 4 ? 'completed'
               : 'pending',
       date: t.date_created ? t.date_created.split('T')[0] : '',
-      worker: t.technician_id ? String(t.technician_id) : null,
+      worker: t.technician_id != null ? String(t.technician_id) : null,
+      technician_id: t.technician_id != null ? String(t.technician_id) : null,
       workerName: t.technician_name || null,
       desc: t.description || ''
     }));
@@ -1100,8 +1137,8 @@ async function loadAppData() {
       dept: t.skill_type || 'Technician'
     }));
 
+    APP.technicians = Array.isArray(techData.technicians) ? techData.technicians.slice() : [];
     APP.companies = [];
-    APP.technicians = [];
 
   } catch (err) {
     showToast('Failed to load data from server.', 'error');
@@ -1608,7 +1645,7 @@ function renderNotifications() {
   const isWorker = APP.currentRole === 'worker';
 
   const myRelevantData = APP.tickets.filter(t =>
-    isWorker ? String(t.technician_id) === String(APP.currentUser.id) : t.user_id == APP.currentUser.id
+    isWorker ? String(t.technician_id) === String(APP.currentUser.technician_id) : t.user_id == APP.currentUser.id
   );
 
   if (isWorker) {
@@ -1689,7 +1726,8 @@ function renderProfile() {
   let professionalDetails = '';
   if (isWorker) {
     professionalDetails = `
-      <div class="detail-row"><label>Employee ID:</label> <span>#${user.id || 'EMP-000'}</span></div>
+      <div class="detail-row"><label>Employee ID:</label> <span>#${user.technician_id || 'EMP-000'}</span></div>
+      <div class="detail-row"><label>User ID:</label> <span>#${user.id || 'UID-unknown'}</span></div>
       <div class="detail-row"><label>Operational Status:</label> <span>${user.technician_status || 'Active'}</span></div>
     `;
   } else {
@@ -1818,7 +1856,7 @@ function formatTicketRow(row) {
     priority: (String(row.priority || 'medium')).toLowerCase(),
     date: row.date ? String(row.date).split('T')[0] : '',
     worker: row.worker || null,
-    technician_id: row.technician_id || null,
+    technician_id: row.technician_id != null ? String(row.technician_id) : (row.technicianId != null ? String(row.technicianId) : null),
     user_id: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
     reporterId: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
     reporterName: row.reporter_name || row.user_name || row.name || row.reporter || row.requester || null,
@@ -1888,7 +1926,9 @@ async function loadUserTickets() {
     let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`;
 
     if (APP.currentRole === 'worker') {
-      endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.id)}`;
+      // Prefer the technician_id (employee id) when available, otherwise fall back to user id
+      const techId = APP.currentUser?.technician_id || APP.currentUser?.id;
+      endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(techId)}`;
     }
 
     const res = await fetch(endpoint);
