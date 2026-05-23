@@ -14,6 +14,8 @@ const APP = {
   currentPage: null,
   tickets: [],
   allTickets: [],
+  managedUsers: [],
+  managedUsersSort: { field: 'user_id', asc: true },
   workers: [],
   technicians: [],
   technicianCandidates: [],
@@ -55,6 +57,8 @@ function handleAuthSuccess(user, role) {
   const normalizedRole = normalizeRole(role);
   APP.currentUser = {
     id: user.user_id || null,
+    user_id: user.user_id || null,
+    technician_id: null,
     name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
     initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
     email: user.email || '',
@@ -65,31 +69,31 @@ function handleAuthSuccess(user, role) {
 }
 
 // ── TOAST MESSAGES ───────────────────────────────────────────
-function showToast(msg, type='info') {
+function showToast(msg, type = 'info') {
   const c = document.getElementById('toast-container');
   if (!c) return;
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   t.textContent = msg;
   c.appendChild(t);
-  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(100%)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(),300); }, 3200);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(100%)'; t.style.transition = 'all 0.3s'; setTimeout(() => t.remove(), 300); }, 3200);
 }
 
 // ── STATUS BADGE HTML ──────────────────────────────────────────
 function statusBadge(s) {
-  const map = { pending:'badge-pending', assigned:'badge-assigned', inprogress:'badge-inprogress', completed:'badge-completed', rejected:'badge-rejected' };
-  const label = { pending:'Pending', assigned:'Assigned', inprogress:'In Progress', completed:'Completed', rejected:'Rejected' };
-  return `<span class="badge ${map[s]||''}">${label[s]||s}</span>`;
+  const map = { pending: 'badge-pending', assigned: 'badge-assigned', inprogress: 'badge-inprogress', completed: 'badge-completed', rejected: 'badge-rejected' };
+  const label = { pending: 'Pending', assigned: 'Assigned', inprogress: 'In Progress', completed: 'Completed', rejected: 'Rejected' };
+  return `<span class="badge ${map[s] || ''}">${label[s] || s}</span>`;
 }
 
 // ── PRIORITY HTML ──────────────────────────────────────────────
 function priorityHtml(p) {
-  return `<span class="priority ${p}"><span class="priority-dot"></span>${p.charAt(0).toUpperCase()+p.slice(1)}</span>`;
+  return `<span class="priority ${p}"><span class="priority-dot"></span>${p.charAt(0).toUpperCase() + p.slice(1)}</span>`;
 }
 
 // ── CATEGORY ICON ──────────────────────────────────────────────
 function catIcon(c) {
-  return { Water:'💧', Road:'🚧', Electric:'⚡', Other:'📋' }[c] || '📋';
+  return { Water: '💧', Road: '🚧', Electric: '⚡', Other: '📋' }[c] || '📋';
 }
 
 // ── INNER APP ROUTER ──────────────────────────────────────────
@@ -108,19 +112,19 @@ async function navigate(page) {
   }
 
   const renders = {
-    'dashboard-citizen':  renderCitizenDashboard,
-    'create-ticket':      renderCreateTicket,
-    'my-tickets':         renderMyTickets,
-    'dashboard-worker':   renderWorkerDashboard,
-    'assigned-jobs':      renderAssignedJobs,
-    'dashboard-admin':    renderAdminDashboard,
-    'all-tickets':        renderAllTickets,
-    'assign-worker':      renderAssignWorker,
-    'contractor-assign':  renderContractorAssignments,
-    'manage-users':       renderManageUsers,
-    'reports':            renderReports,
-    'notifications':      renderNotifications,
-    'profile':            renderProfile,
+    'dashboard-citizen': renderCitizenDashboard,
+    'create-ticket': renderCreateTicket,
+    'my-tickets': renderMyTickets,
+    'dashboard-worker': renderWorkerDashboard,
+    'assigned-jobs': renderAssignedJobs,
+    'dashboard-admin': renderAdminDashboard,
+    'all-tickets': renderAllTickets,
+    'assign-worker': renderAssignWorker,
+    'contractor-assign': renderContractorAssignments,
+    'manage-users': renderManageUsers,
+    'reports': renderReports,
+    'notifications': renderNotifications,
+    'profile': renderProfile,
   };
 
   if (renders[page]) {
@@ -134,12 +138,12 @@ async function navigate(page) {
 async function handleHomeTrackTicket() {
   const ticketInput = document.getElementById('home-track-id');
   const idValue = ticketInput ? ticketInput.value.trim().toUpperCase() : '';
-  
+
   if (!idValue) {
     showToast('Please type a valid Ticket ID first.', 'error');
     return;
   }
-  
+
   const foundTicket = APP.tickets.find(t => t.id === idValue);
   if (foundTicket) {
     showTicketDetail(foundTicket.id);
@@ -285,18 +289,53 @@ async function loadApp() {
   document.getElementById('user-initials').textContent = APP.currentUser.initials;
 
   await loadLocations();
-  await loadUserTickets();
   try {
-  await loadAppData();
+    await loadAppData();
   } catch (err) {
-  console.error('loadAppData failed:', err);
+    console.error('loadAppData failed:', err);
   }
+
+  // If the logged-in user is a worker, try to resolve their technician record using multiple heuristics
+  try {
+    if (APP.currentRole === 'worker' && APP.currentUser && Array.isArray(APP.technicians)) {
+      const uid = String(APP.currentUser.id || APP.currentUser.user_id || '');
+      const uemail = (APP.currentUser.email || '').toLowerCase();
+      const uname = (APP.currentUser.name || '').toLowerCase();
+
+      const me = APP.technicians.find(t => {
+        // common possible fields linking technician -> user
+        const candUserIds = [t.user_id, t.userId, t.user?.user_id, t.user?.id, t.uid, t.user_id];
+        for (const cu of candUserIds) {
+          if (cu != null && String(cu) === uid) return true;
+        }
+
+        // try email
+        const te = (t.email || t.user_email || t.user?.email || '').toLowerCase();
+        if (te && uemail && te === uemail) return true;
+
+        // try name match
+        const tn = ((t.name || '') + ' ' + (t.surname || '')).toLowerCase().trim();
+        if (tn && uname && tn === uname) return true;
+
+        return false;
+      });
+
+      if (me) {
+        APP.currentUser.technician_id = me.technician_id != null ? String(me.technician_id) : (me.technicianId != null ? String(me.technicianId) : (me.id != null ? String(me.id) : null));
+        APP.currentUser.technician_status = me.technician_status || APP.currentUser.technician_status;
+      }
+    }
+  } catch (e) {
+    console.error('Could not resolve technician id for current user', e);
+  }
+
+  await loadUserTickets();
   buildSidebar();
 
   const defaultPage = {
     citizen: 'dashboard-citizen',
-    worker:  'dashboard-worker',
-    admin:   'dashboard-admin',
+    worker: 'dashboard-worker',
+    admin: 'dashboard-admin',
   }[APP.currentRole] || 'dashboard-citizen';
   navigate(defaultPage);
 }
@@ -317,7 +356,7 @@ function buildSidebar() {
     worker: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
-      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">0</span></a>
+      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">${ticketCount}</span></a>
       <div class="sidebar-section-label">Account</div>
       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
@@ -349,19 +388,16 @@ function refreshMyTicketsBadge() {
 // FIX 1: changed APP.currentUser.user_id to APP.currentUser.id
 function refreshWorkerJobsBadge() {
   const badge = document.getElementById('worker-jobs-badge');
-  if (badge && APP.currentUser?.id) {
-    const activeJobs = APP.tickets.filter(t =>
-      String(t.technician_id) === String(APP.currentUser.id) &&
-      t.status !== 'completed'
-    ).length;
-    badge.textContent = String(activeJobs);
+  if (badge && APP.currentUser?.technician_id) {
+    const activeJobs = APP.tickets.length;
+    badge.textContent = String(activeJobs || 0);
   }
 }
 
 // ── PAGE RENDERS ───────────────────────────────────────────────
 function renderCitizenDashboard() {
   const stats = APP.tickets;
-  const myTickets = stats.slice(0,4);
+  const myTickets = stats.slice(0, 4);
   // FIX 2: changed APP.currentUser.user_id to APP.currentUser.id
   const userIdDisplay = APP.currentUser.id ? `<span class="user-id-badge">#${APP.currentUser.id}</span>` : '';
   return `
@@ -374,15 +410,15 @@ function renderCitizenDashboard() {
   </div>
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-number">${stats.length}</div><div class="stat-label">Total Submitted</div></div>
-    <div class="stat-card orange"><div class="stat-number">${stats.filter(t=>t.status==='pending').length}</div><div class="stat-label">Pending</div></div>
-    <div class="stat-card blue"><div class="stat-number">${stats.filter(t=>t.status==='inprogress').length}</div><div class="stat-label">In Progress</div></div>
-    <div class="stat-card green"><div class="stat-number">${stats.filter(t=>t.status==='completed').length}</div><div class="stat-label">Completed</div></div>
+    <div class="stat-card orange"><div class="stat-number">${stats.filter(t => t.status === 'pending').length}</div><div class="stat-label">Pending</div></div>
+    <div class="stat-card blue"><div class="stat-number">${stats.filter(t => t.status === 'inprogress').length}</div><div class="stat-label">In Progress</div></div>
+    <div class="stat-card green"><div class="stat-number">${stats.filter(t => t.status === 'completed').length}</div><div class="stat-label">Completed</div></div>
   </div>
   <div class="card">
     <div class="card-header"><span class="card-title">Recent Tickets</span><a class="btn btn-sm btn-outline" onclick="navigate('my-tickets')">View All</a></div>
     <div class="card-body">
       <div class="ticket-list">
-        ${myTickets.map(t=>`
+        ${myTickets.map(t => `
         <div class="ticket-item" onclick="showTicketDetail('${t.id}')">
           <div class="ticket-icon ${t.category.toLowerCase()}">${catIcon(t.category)}</div>
           <div class="ticket-info">
@@ -401,7 +437,7 @@ function renderCitizenDashboard() {
 
 function renderCreateTicket() {
   const locOptions = buildLocationOptions('');
-  
+
   return `
   <div class="page-header">
     <div>
@@ -478,7 +514,7 @@ function renderMyTickets() {
         <table id="tickets-table">
           <thead><tr><th>Ticket ID</th><th>Title</th><th>Category</th><th>Location</th><th>Date</th><th>Status</th><th>Priority</th><th></th></tr></thead>
           <tbody>
-            ${APP.tickets.map(t=>`<tr>
+            ${APP.tickets.map(t => `<tr>
               <td style="font-weight:700;color:var(--navy)">${t.id}</td>
               <td>${t.title}</td>
               <td>${catIcon(t.category)} ${t.category}</td>
@@ -496,11 +532,10 @@ function renderMyTickets() {
 }
 
 function renderWorkerDashboard() {
-  // FIX 3: changed t.technician_id == APP.currentUser.user_id to APP.currentUser.id
-  const assigned = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);
+  const assigned = APP.tickets.filter(t => String(t.technician_id) === String(APP.currentUser.technician_id));
   const activeStatus = APP.currentUser.technician_status ?? 'Active';
   const totalAssigned = assigned.length;
-  const pendingCount  = assigned.filter(t => t.status === 'pending' || t.status === 'assigned').length;
+  const pendingCount = assigned.filter(t => t.status === 'pending' || t.status === 'assigned').length;
   const progressCount = assigned.filter(t => t.status === 'inprogress').length;
   const completedCount = assigned.filter(t => t.status === 'completed').length;
   return `
@@ -598,8 +633,7 @@ async function handleUpdateAvailability(newStatus) {
 }
 
 function renderAssignedJobs() {
-  // FIX 5: changed APP.currentUser.user_id to APP.currentUser.id
-  const myJobs = APP.tickets.filter(t => t.technician_id == APP.currentUser.id);
+  const myJobs = APP.tickets.filter(t => String(t.technician_id) === String(APP.currentUser.technician_id));
   return `
   <div class="page-header"><div><div class="page-title">My Assigned Tasks</div></div></div>
   <div class="card">
@@ -608,7 +642,7 @@ function renderAssignedJobs() {
         <table>
           <thead><tr><th>Ticket ID</th><th>Title</th><th>Location</th><th>Priority</th><th>Job Status</th><th>View</th><th>Actions</th></tr></thead>
           <tbody>
-            ${myJobs.map(t=>`
+            ${myJobs.map(t => `
               <tr>
                 <td style="font-weight:700;color:var(--navy)">${t.id}</td>
                 <td>${t.title}</td>
@@ -616,10 +650,10 @@ function renderAssignedJobs() {
                 <td>${priorityHtml(t.priority)}</td>
                 <td>
                   <select class="form-control" style="width:130px;" onchange="updateJobStatus('${t.id}', this.value)">
-                    <option value="assigned" ${t.status==='assigned'?'selected':''}>Assigned</option>
-                    <option value="inprogress" ${t.status==='inprogress'?'selected':''}>In Progress</option>
-                    <option value="completed" ${t.status==='completed'?'selected':''}>Completed</option>
-                    <option value="rejected" ${t.status==='rejected'?'selected':''}>Rejected</option>
+                    <option value="assigned" ${t.status === 'assigned' ? 'selected' : ''}>Assigned</option>
+                    <option value="inprogress" ${t.status === 'inprogress' ? 'selected' : ''}>In Progress</option>
+                    <option value="completed" ${t.status === 'completed' ? 'selected' : ''}>Completed</option>
+                    <option value="rejected" ${t.status === 'rejected' ? 'selected' : ''}>Rejected</option>
                   </select>
                 </td>
                 <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
@@ -693,8 +727,104 @@ function triggerUploadPicture(ticketId) {
   input.click();
 }
 
-function renderAdminDashboard() {
-  return `<div class="page-header"><div><div class="page-title">Admin Command Console</div></div></div>`;
+async function renderAdminDashboard() {
+  try {
+    const [ticketsRes, usersRes, techRes, companyRes] = await Promise.all([
+      fetch(`${API_URL}/tickets`),
+      fetch(`${API_URL}/users`),
+      fetch(`${API_URL}/technicians`),
+      fetch(`${API_URL}/companies`)
+    ]);
+
+    const [ticketsData, usersData, techData, companiesData] = await Promise.all([
+      ticketsRes.ok ? ticketsRes.json() : null,
+      usersRes.ok ? usersRes.json() : null,
+      techRes.ok ? techRes.json() : null,
+      companyRes.ok ? companyRes.json() : null
+    ]);
+
+    const tickets = Array.isArray(ticketsData) ? ticketsData : (ticketsData?.tickets || []);
+    const users = Array.isArray(usersData?.users) ? usersData.users : (Array.isArray(usersData) ? usersData : []);
+    const technicians = Array.isArray(techData?.technicians) ? techData.technicians : (Array.isArray(techData) ? techData : []);
+    const companies = Array.isArray(companiesData?.companies) ? companiesData.companies : (Array.isArray(companiesData) ? companiesData : []);
+
+    const totalTickets = tickets.length;
+    const pendingTickets = tickets.filter(t => t.status_id === 1 || String(t.status).toLowerCase() === 'pending').length;
+    const assignedTickets = tickets.filter(t => t.status_id === 2 || String(t.status).toLowerCase() === 'assigned').length;
+    const inProgressTickets = tickets.filter(t => t.status_id === 3 || String(t.status).toLowerCase() === 'inprogress').length;
+    const completedTickets = tickets.filter(t => t.status_id === 4 || String(t.status).toLowerCase() === 'completed').length;
+    const rejectedTickets = tickets.filter(t => t.status_id === 5 || String(t.status).toLowerCase() === 'rejected').length;
+    const openTickets = totalTickets - completedTickets - rejectedTickets;
+    const activeTechnicians = technicians.filter(t => String(t.technician_status).toLowerCase() === 'active').length;
+
+    const recentTickets = tickets
+      .slice()
+      .sort((a, b) => {
+        const da = new Date(a.date_created || a.created_at || a.createdAt || 0).getTime();
+        const db = new Date(b.date_created || b.created_at || b.createdAt || 0).getTime();
+        return db - da;
+      })
+      .slice(0, 5);
+
+    return `
+      <div class="page-header">
+        <div>
+          <div class="page-title">Admin Command Console</div>
+          <div class="page-subtitle">Live operational figures pulled from the system database.</div>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-number">${totalTickets}</div><div class="stat-label">Total Tickets</div></div>
+        <div class="stat-card orange"><div class="stat-number">${pendingTickets}</div><div class="stat-label">Pending Tickets</div></div>
+        <div class="stat-card blue"><div class="stat-number">${inProgressTickets}</div><div class="stat-label">In Progress</div></div>
+        <div class="stat-card green"><div class="stat-number">${completedTickets}</div><div class="stat-label">Completed</div></div>
+      </div>
+
+      <div class="stats-grid" style="margin-top:1rem;">
+        <div class="stat-card"><div class="stat-number">${users.length}</div><div class="stat-label">Registered Users</div></div>
+        <div class="stat-card"><div class="stat-number">${technicians.length}</div><div class="stat-label">Technicians</div></div>
+        <div class="stat-card"><div class="stat-number">${companies.length}</div><div class="stat-label">Companies</div></div>
+        <div class="stat-card orange"><div class="stat-number">${openTickets}</div><div class="stat-label">Open Tickets</div></div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem;">
+        <div class="card-header"><span class="card-title">Quick Actions</span></div>
+        <div class="card-body" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+          <button class="btn btn-primary" onclick="navigate('all-tickets')">View All Tickets</button>
+          <button class="btn btn-primary" onclick="navigate('manage-users')">Manage Users</button>
+          <button class="btn btn-primary" onclick="navigate('contractor-assign')">Contractors</button>
+          <button class="btn btn-primary" onclick="navigate('reports')">Reports</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:1.5rem;">
+        <div class="card-header"><span class="card-title">Recent Tickets</span></div>
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Ticket ID</th><th>Title</th><th>Status</th><th>Priority</th><th>Date</th></tr>
+              </thead>
+              <tbody>
+                ${recentTickets.length === 0 ? `<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets available.</td></tr>` : recentTickets.map(t => `
+                  <tr>
+                    <td style="font-weight:700;color:var(--navy)">${t.ticket_id ? `TK-${t.ticket_id}` : '-'} </td>
+                    <td>${escapeHtml(t.title || t.description || '-')}</td>
+                    <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : t.status_id == 4 ? 'completed' : t.status_id == 5 ? 'rejected' : (String(t.status || '').toLowerCase()))}</td>
+                    <td>${priorityHtml(String(t.priority || 'medium'))}</td>
+                    <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : t.created_at ? new Date(t.created_at).toLocaleDateString() : '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  } catch (err) {
+    console.error('renderAdminDashboard failed:', err);
+    return `<div class="card"><div class="card-body">Unable to load admin dashboard data right now. Please try again later.</div></div>`;
+  }
 }
 
 async function renderAllTickets() {
@@ -731,8 +861,8 @@ async function renderAllTickets() {
               </tr>
             </thead>
             <tbody>
-              ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` : 
-                data.map(t => `
+              ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` :
+        data.map(t => `
                 <tr id="ticket-row-${t.ticket_id}">
                   <td style="font-weight:700;color:var(--navy)">${t.ticket_id ? `TK-${t.ticket_id}` : '-'}</td>
                   <td>${t.title || '-'}</td>
@@ -797,7 +927,7 @@ async function deleteTicket(ticketId, ticketTitle) {
 function renderAssignWorker() {
   const tickets = APP.allTickets.length ? APP.allTickets : APP.tickets;
   const unassigned = tickets.filter(t => t.status === 'pending');
-  const assigned   = tickets.filter(t => t.worker !== null || t.status === 'assigned' || t.status === 'inprogress' || t.status === 'completed');
+  const assigned = tickets.filter(t => t.worker !== null || t.status === 'assigned' || t.status === 'inprogress' || t.status === 'completed');
 
   return `
   <div class="page-header">
@@ -813,10 +943,10 @@ function renderAssignWorker() {
     </div>
     <div class="card-body" style="padding:0">
       ${unassigned.length === 0
-        ? `<div style="padding:2rem;text-align:center;color:#888">
+      ? `<div style="padding:2rem;text-align:center;color:#888">
               No pending tickets at the moment.
            </div>`
-        : `<div class="table-wrap">
+      : `<div class="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -856,7 +986,7 @@ function renderAssignWorker() {
               </tbody>
             </table>
           </div>`
-      }
+    }
     </div>
   </div>
 
@@ -866,10 +996,10 @@ function renderAssignWorker() {
     </div>
     <div class="card-body" style="padding:0">
       ${assigned.length === 0
-        ? `<div style="padding:2rem;text-align:center;color:#888">
+      ? `<div style="padding:2rem;text-align:center;color:#888">
               No assigned tickets yet.
            </div>`
-        : `<div class="table-wrap">
+      : `<div class="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -894,12 +1024,12 @@ function renderAssignWorker() {
               </tbody>
             </table>
           </div>`
-      }
+    }
     </div>
   </div>`;
 }
 async function assignTicket(appId, rawId) {
-  const select   = document.getElementById(`select-${appId}`);
+  const select = document.getElementById(`select-${appId}`);
   const workerId = select ? select.value : '';
 
   if (!workerId) {
@@ -913,9 +1043,9 @@ async function assignTicket(appId, rawId) {
 
   try {
     const res = await fetch(`${API_URL}/assign-ticket`, {
-      method:  'POST',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ ticket_id: rawId, technician_id: workerId })
+      body: JSON.stringify({ ticket_id: rawId, technician_id: workerId })
     });
 
     const data = await res.json();
@@ -930,9 +1060,10 @@ async function assignTicket(appId, rawId) {
     const ticketInUser = APP.tickets.find(t => t.id === appId);
     [ticketInAll, ticketInUser].forEach(t => {
       if (!t) return;
-      t.worker     = workerId;
+      t.worker = workerId;
+      t.technician_id = String(workerId);
       t.workerName = worker.name;
-      t.status     = 'assigned';
+      t.status = 'assigned';
     });
 
     showToast(`✅ ${appId} assigned to ${worker.name}`, 'success');
@@ -973,40 +1104,41 @@ async function assignTicket(appId, rawId) {
 async function loadAppData() {
   try {
     // Load all tickets
-    const ticketRes  = await fetch(`${API_URL}/tickets`);
+    const ticketRes = await fetch(`${API_URL}/tickets`);
     const ticketData = await ticketRes.json();
 
     APP.allTickets = ticketData.map(t => ({
-      id:         'TK-' + t.ticket_id,
-      raw_id:     t.ticket_id,
-      title:      t.title,
-      category:   t.asset_type || 'Other',
-      location:   t.location   || 'Unknown',
-      priority:   (t.priority  || 'Medium').toLowerCase(),
-      status:     t.status_id === 1 ? 'pending'
-                : t.status_id === 2 ? 'assigned'
-                : t.status_id === 3 ? 'inprogress'
-                : t.status_id === 4 ? 'completed'
-                : 'pending',
-      date:       t.date_created ? t.date_created.split('T')[0] : '',
-      worker:     t.technician_id ? String(t.technician_id) : null,
+      id: 'TK-' + t.ticket_id,
+      raw_id: t.ticket_id,
+      title: t.title,
+      category: t.asset_type || 'Other',
+      location: t.location || 'Unknown',
+      priority: (t.priority || 'Medium').toLowerCase(),
+      status: t.status_id === 1 ? 'pending'
+        : t.status_id === 2 ? 'assigned'
+          : t.status_id === 3 ? 'inprogress'
+            : t.status_id === 4 ? 'completed'
+              : 'pending',
+      date: t.date_created ? t.date_created.split('T')[0] : '',
+      worker: t.technician_id != null ? String(t.technician_id) : null,
+      technician_id: t.technician_id != null ? String(t.technician_id) : null,
       workerName: t.technician_name || null,
-      desc:       t.description || ''
+      desc: t.description || ''
     }));
 
     // Load active technicians
-    const techRes  = await fetch(`${API_URL}/technicians`);
+    const techRes = await fetch(`${API_URL}/technicians`);
     const techData = await techRes.json();
 
     APP.workers = techData.technicians.map(t => ({
-      id:    String(t.technician_id),
-      name:  t.name + ' ' + t.surname,
+      id: String(t.technician_id),
+      name: t.name + ' ' + t.surname,
       skill: t.skill_type || 'General',
-      dept:  t.skill_type || 'Technician'
+      dept: t.skill_type || 'Technician'
     }));
 
+    APP.technicians = Array.isArray(techData.technicians) ? techData.technicians.slice() : [];
     APP.companies = [];
-    APP.technicians = [];
 
   } catch (err) {
     showToast('Failed to load data from server.', 'error');
@@ -1384,18 +1516,25 @@ function resolveWorkerNameWithCompany(ticket) {
 
 async function renderManageUsers() {
   try {
-    const res  = await fetch(`${API_URL}/users`);
+    const res = await fetch(`${API_URL}/users`);
     const data = await res.json();
 
     if (!data.success) {
       return `<div class="card"><div class="card-body">Failed to load users.</div></div>`;
     }
 
+    // store users in-app so we can sort without refetching
+    APP.managedUsers = Array.isArray(data.users) ? data.users.slice() : [];
+
+    // determine header sort markers
+    const idMarker = APP.managedUsersSort.field === 'user_id' ? (APP.managedUsersSort.asc ? ' ▲' : ' ▼') : '';
+    const roleMarker = APP.managedUsersSort.field === 'role' ? (APP.managedUsersSort.asc ? ' ▲' : ' ▼') : '';
+
     return `
     <div class="page-header">
       <div>
         <div class="page-title">Manage Users</div>
-        <div class="page-subtitle">All registered system users (${data.users.length} total)</div>
+        <div class="page-subtitle">All registered system users (${APP.managedUsers.length} total)</div>
       </div>
     </div>
     <div class="card">
@@ -1404,33 +1543,29 @@ async function renderManageUsers() {
           <table>
             <thead>
               <tr>
-                <th>ID</th>
+                <th id="th-id" style="cursor:pointer" onclick="toggleUserSort('user_id')">ID${idMarker}</th>
                 <th>Name</th>
                 <th>Surname</th>
                 <th>Email</th>
                 <th>Cellphone</th>
                 <th>Password</th>
-                <th>Role</th>
+                <th id="th-role" style="cursor:pointer" onclick="toggleUserSort('role')">Role${roleMarker}</th>
                 <th></th>
               </tr>
             </thead>
-            <tbody>
-              ${data.users.map(u => `
+            <tbody class="manage-users-tbody">
+              ${APP.managedUsers.map(u => `
                 <tr id="user-row-${u.user_id}">
                   <td style="font-weight:700;color:var(--navy)">${u.user_id}</td>
-                  <td><input class="form-control" id="u-name-${u.user_id}"      value="${u.name}"           style="min-width:90px"></td>
-                  <td><input class="form-control" id="u-surname-${u.user_id}"   value="${u.surname}"        style="min-width:90px"></td>
-                  <td><input class="form-control" id="u-email-${u.user_id}"     value="${u.email}"          style="min-width:150px"></td>
-                  <td><input class="form-control" id="u-cellphone-${u.user_id}" value="${u.cellphone || ''}" style="min-width:110px"></td>
-                  <td><input class="form-control" id="u-password-${u.user_id}"  value="${u.password}"       style="min-width:110px"></td>
-                  <td>${u.role}</td>
+                  <td><input class="form-control" id="u-name-${u.user_id}"      value="${escapeHtml(u.name)}"           style="min-width:90px"></td>
+                  <td><input class="form-control" id="u-surname-${u.user_id}"   value="${escapeHtml(u.surname)}"        style="min-width:90px"></td>
+                  <td><input class="form-control" id="u-email-${u.user_id}"     value="${escapeHtml(u.email)}"          style="min-width:150px"></td>
+                  <td><input class="form-control" id="u-cellphone-${u.user_id}" value="${escapeHtml(u.cellphone || '')}" style="min-width:110px"></td>
+                  <td><input class="form-control" id="u-password-${u.user_id}"  value="${escapeHtml(u.password || '')}"       style="min-width:110px"></td>
+                  <td>${escapeHtml(u.role)}</td>
                   <td>
-                    <button class="btn btn-sm btn-primary" onclick="saveUserEdit(${u.user_id})">
-                     Save
-                    </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.user_id}, '${u.name} ${u.surname}')" style="margin-left:6px">
-                     Delete
-                    </button>
+                    <button class="btn btn-sm btn-primary" onclick="saveUserEdit(${u.user_id})">Save</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.user_id}, '${(String(u.name || '') + ' ' + String(u.surname || '')).replace(/'/g, "")}')" style="margin-left:6px">Delete</button>
                   </td>
                 </tr>
               `).join('')}
@@ -1472,11 +1607,11 @@ async function deleteUser(userId, userName) {
   }
 }
 async function saveUserEdit(userId) {
-  const name      = document.getElementById(`u-name-${userId}`)?.value.trim();
-  const surname   = document.getElementById(`u-surname-${userId}`)?.value.trim();
-  const email     = document.getElementById(`u-email-${userId}`)?.value.trim();
+  const name = document.getElementById(`u-name-${userId}`)?.value.trim();
+  const surname = document.getElementById(`u-surname-${userId}`)?.value.trim();
+  const email = document.getElementById(`u-email-${userId}`)?.value.trim();
   const cellphone = document.getElementById(`u-cellphone-${userId}`)?.value.trim();
-  const password  = document.getElementById(`u-password-${userId}`)?.value.trim();
+  const password = document.getElementById(`u-password-${userId}`)?.value.trim();
 
   if (!name || !surname || !email || !password) {
     showToast('Name, surname, email and password are required.', 'error');
@@ -1485,9 +1620,9 @@ async function saveUserEdit(userId) {
 
   try {
     const res = await fetch(`${API_URL}/users/${userId}`, {
-      method:  'PUT',
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ name, surname, email, cellphone, password })
+      body: JSON.stringify({ name, surname, email, cellphone, password })
     });
 
     const data = await res.json();
@@ -1508,9 +1643,9 @@ function renderReports() { return `<div class="card"><div class="card-body"><h3>
 
 function renderNotifications() {
   const isWorker = APP.currentRole === 'worker';
-  
-  const myRelevantData = APP.tickets.filter(t => 
-    isWorker ? String(t.technician_id) === String(APP.currentUser.id) : t.user_id == APP.currentUser.id
+
+  const myRelevantData = APP.tickets.filter(t =>
+    isWorker ? String(t.technician_id) === String(APP.currentUser.technician_id) : t.user_id == APP.currentUser.id
   );
 
   if (isWorker) {
@@ -1574,14 +1709,14 @@ function renderProfile() {
   }
 
   const isWorker = APP.currentRole === 'worker';
-  
+
   let statusSection = '';
   if (isWorker) {
     const currentStatus = user.technician_status || 'Active';
     let statusBadgeColor = '#38A169';
     if (currentStatus === 'Inactive') statusBadgeColor = '#718096';
     if (currentStatus === 'On Leave') statusBadgeColor = '#DD6B20';
-    
+
     statusSection = `
       <div style="display: inline-block; margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: ${statusBadgeColor}; color: white; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">
         ● ${currentStatus}
@@ -1591,7 +1726,8 @@ function renderProfile() {
   let professionalDetails = '';
   if (isWorker) {
     professionalDetails = `
-      <div class="detail-row"><label>Employee ID:</label> <span>#${user.id || 'EMP-000'}</span></div>
+      <div class="detail-row"><label>Employee ID:</label> <span>#${user.technician_id || 'EMP-000'}</span></div>
+      <div class="detail-row"><label>User ID:</label> <span>#${user.id || 'UID-unknown'}</span></div>
       <div class="detail-row"><label>Operational Status:</label> <span>${user.technician_status || 'Active'}</span></div>
     `;
   } else {
@@ -1637,15 +1773,24 @@ async function showTicketDetail(ticketId) {
   let imageHtml = '';
   try {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
-    const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${APP.currentUser?.id}`;
-    const checkRes = await fetch(imageUrl);
-    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-      imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+    const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
+    for (const ownerId of ownerIds) {
+      const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${ownerId}`;
+      try {
+        const checkRes = await fetch(imageUrl);
+        if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+          imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+          break;
+        }
+      } catch (err) {
+        // continue to next candidate
+      }
     }
   } catch (err) {
     console.log('No image for ticket', ticketId);
   }
 
+  const reporterInfo = ticket.reporterName ? `${ticket.reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
       <div class="modal" onclick="event.stopPropagation()">
@@ -1660,6 +1805,7 @@ async function showTicketDetail(ticketId) {
           </div>
           <p style="margin-bottom:0.75rem;"><strong>Region / Location:</strong> ${ticket.location}</p>
           <p style="margin-bottom:0.75rem;"><strong>Reported Date:</strong> ${ticket.date}</p>
+          <p style="margin-bottom:0.75rem;"><strong>Reported By:</strong> ${reporterInfo}</p>
           <div style="background:#F4F6F9; padding:1rem; border-radius:4px; margin-top:1rem;">
              <strong>Description:</strong><br>
              <span style="font-size:0.9rem;">${ticket.desc || 'No details provided.'}</span>
@@ -1697,9 +1843,9 @@ function formatTicketRow(row) {
   const status = row.status ||
     (row.status_id === 1 ? 'pending'
       : row.status_id === 2 ? 'assigned'
-      : row.status_id === 3 ? 'inprogress'
-      : row.status_id === 4 ? 'completed'
-      : 'pending');
+        : row.status_id === 3 ? 'inprogress'
+          : row.status_id === 4 ? 'completed'
+            : 'pending');
 
   return {
     id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
@@ -1710,7 +1856,10 @@ function formatTicketRow(row) {
     priority: (String(row.priority || 'medium')).toLowerCase(),
     date: row.date ? String(row.date).split('T')[0] : '',
     worker: row.worker || null,
-    technician_id: row.technician_id || null,
+    technician_id: row.technician_id != null ? String(row.technician_id) : (row.technicianId != null ? String(row.technicianId) : null),
+    user_id: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterId: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterName: row.reporter_name || row.user_name || row.name || row.reporter || row.requester || null,
     desc: row.description || row.desc || ''
   };
 }
@@ -1747,11 +1896,11 @@ function updateLocationOptions(category) {
 
 async function loadLocations() {
   if (APP.locations.length > 0) return;
-  
+
   try {
     const res = await fetch(`${API_URL}/locations`);
     const data = await res.json();
-    
+
     if (data.success) {
       APP.locations = data.locations.map(loc => ({
         ...loc,
@@ -1775,9 +1924,11 @@ async function loadUserTickets() {
   try {
     // FIX 6: changed APP.currentUser.user_id to APP.currentUser.id in both endpoints
     let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`;
-    
+
     if (APP.currentRole === 'worker') {
-      endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.id)}`;
+      // Prefer the technician_id (employee id) when available, otherwise fall back to user id
+      const techId = APP.currentUser?.technician_id || APP.currentUser?.id;
+      endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(techId)}`;
     }
 
     const res = await fetch(endpoint);
@@ -1797,10 +1948,16 @@ async function loadUserTickets() {
 }
 
 async function uploadTicketImage(ticketId, file) {
+  if (!file || !ticketId || !APP.currentUser?.id) {
+    return { success: false, message: 'Missing required fields for image upload.' };
+  }
+
   const formData = new FormData();
   formData.append('picture', file);
-  formData.append('ticket_id', ticketId);
-  formData.append('user_id', APP.currentUser?.id || '');
+  // Strip TK- prefix if present
+  const cleanTicketId = String(ticketId).replace(/^TK-/, '');
+  formData.append('ticket_id', cleanTicketId);
+  formData.append('user_id', String(APP.currentUser.id));
 
   try {
     const res = await fetch('http://105.228.61.32:3001/upload-picture', {
@@ -1816,12 +1973,12 @@ async function uploadTicketImage(ticketId, file) {
 
 async function submitTicket() {
   const title = document.getElementById('t-title')?.value.trim();
-  const cat   = document.getElementById('t-cat')?.value;
-  const desc  = document.getElementById('t-desc')?.value.trim();
+  const cat = document.getElementById('t-cat')?.value;
+  const desc = document.getElementById('t-desc')?.value.trim();
   const imageFile = document.getElementById('t-image')?.files?.[0] || null;
-  const loc   = document.getElementById('t-loc')?.value.trim();
-  const pri   = (document.getElementById('t-priority')?.value || 'Medium');
-  if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
+  const loc = document.getElementById('t-loc')?.value.trim();
+  const pri = (document.getElementById('t-priority')?.value || 'Medium');
+  if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.', 'error'); return; }
 
   try {
     const res = await fetch(`${API_URL}/tickets`, {
@@ -1832,7 +1989,16 @@ async function submitTicket() {
 
     const data = await res.json();
     if (!data.success) {
-      showToast(data.message || 'Failed to submit ticket.','error');
+      showToast(data.message || 'Failed to submit ticket.', 'error');
+      return;
+    }
+
+    // Extract ticket ID from response (could be data.id, data.ticket_id, or data.data.ticket_id)
+    const newTicketId = data.id || data.ticket_id || data.data?.ticket_id;
+    if (!newTicketId) {
+      showToast('Ticket created but ID not found in response.', 'warning');
+      await loadUserTickets();
+      setTimeout(() => navigate('my-tickets'), 1000);
       return;
     }
 
@@ -1840,7 +2006,7 @@ async function submitTicket() {
     let toastType = 'success';
 
     if (imageFile) {
-      const uploadResult = await uploadTicketImage(data.id, imageFile);
+      const uploadResult = await uploadTicketImage(newTicketId, imageFile);
       if (!uploadResult.success) {
         message = uploadResult.message || 'Ticket created, but image upload failed.';
         toastType = 'warning';
@@ -1850,12 +2016,18 @@ async function submitTicket() {
     }
 
     showToast(message, toastType);
+
+    // Clear the form
+    const form = document.getElementById('create-ticket-form');
+    if (form) form.reset();
+
+    // Reload tickets and navigate
     await loadUserTickets();
     refreshMyTicketsBadge();
     setTimeout(() => navigate('my-tickets'), 800);
   } catch (err) {
     console.error('Submit ticket error', err);
-    showToast('Server error while submitting ticket.','error');
+    showToast('Server error while submitting ticket.', 'error');
   }
 }
 
@@ -1864,4 +2036,55 @@ function logout() {
   APP.currentUser = null; APP.currentRole = null;
   showScreen('home-screen');
   showToast('You have been logged out.', 'info');
+}
+// Toggle sort for managed users and re-render the table body
+function toggleUserSort(field) {
+  if (!APP.managedUsers || !Array.isArray(APP.managedUsers)) return;
+
+  if (APP.managedUsersSort.field === field) {
+    APP.managedUsersSort.asc = !APP.managedUsersSort.asc;
+  } else {
+    APP.managedUsersSort.field = field;
+    APP.managedUsersSort.asc = true;
+  }
+
+  const dir = APP.managedUsersSort.asc ? 1 : -1;
+
+  APP.managedUsers.sort((a, b) => {
+    const av = a[field] == null ? '' : a[field];
+    const bv = b[field] == null ? '' : b[field];
+    if (field === 'user_id') {
+      const na = Number(av);
+      const nb = Number(bv);
+      if (!isNaN(na) && !isNaN(nb)) return (na - nb) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    }
+    return String(av).toLowerCase().localeCompare(String(bv).toLowerCase()) * dir;
+  });
+
+  // update header markers
+  const thId = document.getElementById('th-id');
+  const thRole = document.getElementById('th-role');
+  if (thId) thId.textContent = 'ID' + (APP.managedUsersSort.field === 'user_id' ? (APP.managedUsersSort.asc ? ' ▲' : ' ▼') : '');
+  if (thRole) thRole.textContent = 'Role' + (APP.managedUsersSort.field === 'role' ? (APP.managedUsersSort.asc ? ' ▲' : ' ▼') : '');
+
+  // re-render tbody
+  const tbody = document.querySelector('.manage-users-tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = APP.managedUsers.map(u => `
+    <tr id="user-row-${u.user_id}">
+      <td style="font-weight:700;color:var(--navy)">${u.user_id}</td>
+      <td><input class="form-control" id="u-name-${u.user_id}"      value="${escapeHtml(u.name)}"           style="min-width:90px"></td>
+      <td><input class="form-control" id="u-surname-${u.user_id}"   value="${escapeHtml(u.surname)}"        style="min-width:90px"></td>
+      <td><input class="form-control" id="u-email-${u.user_id}"     value="${escapeHtml(u.email)}"          style="min-width:150px"></td>
+      <td><input class="form-control" id="u-cellphone-${u.user_id}" value="${escapeHtml(u.cellphone || '')}" style="min-width:110px"></td>
+      <td><input class="form-control" id="u-password-${u.user_id}"  value="${escapeHtml(u.password || '')}"       style="min-width:110px"></td>
+      <td>${escapeHtml(u.role)}</td>
+      <td>
+        <button class="btn btn-sm btn-primary" onclick="saveUserEdit(${u.user_id})">Save</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.user_id}, '${(String(u.name || '') + ' ' + String(u.surname || '')).replace(/'/g, "")}')" style="margin-left:6px">Delete</button>
+      </td>
+    </tr>
+  `).join('');
 }
