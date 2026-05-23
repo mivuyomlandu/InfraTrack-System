@@ -319,7 +319,7 @@ function buildSidebar() {
     worker: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
-      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">0</span></a>
+      <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">${ticketCount}</span></a>
       <div class="sidebar-section-label">Account</div>
       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
@@ -352,11 +352,8 @@ function refreshMyTicketsBadge() {
 function refreshWorkerJobsBadge() {
   const badge = document.getElementById('worker-jobs-badge');
   if (badge && APP.currentUser?.id) {
-    const activeJobs = APP.tickets.filter(t =>
-      String(t.technician_id) === String(APP.currentUser.id) &&
-      t.status !== 'completed'
-    ).length;
-    badge.textContent = String(activeJobs);
+    const activeJobs = APP.tickets.length;
+    badge.textContent = String(activeJobs || 0);
   }
 }
 
@@ -1738,15 +1735,24 @@ async function showTicketDetail(ticketId) {
   let imageHtml = '';
   try {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
-    const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${APP.currentUser?.id}`;
-    const checkRes = await fetch(imageUrl);
-    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-      imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+    const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
+    for (const ownerId of ownerIds) {
+      const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${ownerId}`;
+      try {
+        const checkRes = await fetch(imageUrl);
+        if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+          imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+          break;
+        }
+      } catch (err) {
+        // continue to next candidate
+      }
     }
   } catch (err) {
     console.log('No image for ticket', ticketId);
   }
 
+  const reporterInfo = ticket.reporterName ? `${ticket.reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
       <div class="modal" onclick="event.stopPropagation()">
@@ -1761,6 +1767,7 @@ async function showTicketDetail(ticketId) {
           </div>
           <p style="margin-bottom:0.75rem;"><strong>Region / Location:</strong> ${ticket.location}</p>
           <p style="margin-bottom:0.75rem;"><strong>Reported Date:</strong> ${ticket.date}</p>
+          <p style="margin-bottom:0.75rem;"><strong>Reported By:</strong> ${reporterInfo}</p>
           <div style="background:#F4F6F9; padding:1rem; border-radius:4px; margin-top:1rem;">
              <strong>Description:</strong><br>
              <span style="font-size:0.9rem;">${ticket.desc || 'No details provided.'}</span>
@@ -1812,6 +1819,9 @@ function formatTicketRow(row) {
     date: row.date ? String(row.date).split('T')[0] : '',
     worker: row.worker || null,
     technician_id: row.technician_id || null,
+    user_id: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterId: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterName: row.reporter_name || row.user_name || row.name || row.reporter || row.requester || null,
     desc: row.description || row.desc || ''
   };
 }
@@ -1898,10 +1908,16 @@ async function loadUserTickets() {
 }
 
 async function uploadTicketImage(ticketId, file) {
+  if (!file || !ticketId || !APP.currentUser?.id) {
+    return { success: false, message: 'Missing required fields for image upload.' };
+  }
+
   const formData = new FormData();
   formData.append('picture', file);
-  formData.append('ticket_id', ticketId);
-  formData.append('user_id', APP.currentUser?.id || '');
+  // Strip TK- prefix if present
+  const cleanTicketId = String(ticketId).replace(/^TK-/, '');
+  formData.append('ticket_id', cleanTicketId);
+  formData.append('user_id', String(APP.currentUser.id));
 
   try {
     const res = await fetch('http://105.228.61.32:3001/upload-picture', {
@@ -1937,11 +1953,20 @@ async function submitTicket() {
       return;
     }
 
+    // Extract ticket ID from response (could be data.id, data.ticket_id, or data.data.ticket_id)
+    const newTicketId = data.id || data.ticket_id || data.data?.ticket_id;
+    if (!newTicketId) {
+      showToast('Ticket created but ID not found in response.', 'warning');
+      await loadUserTickets();
+      setTimeout(() => navigate('my-tickets'), 1000);
+      return;
+    }
+
     let message = '🎉 Ticket submitted!';
     let toastType = 'success';
 
     if (imageFile) {
-      const uploadResult = await uploadTicketImage(data.id, imageFile);
+      const uploadResult = await uploadTicketImage(newTicketId, imageFile);
       if (!uploadResult.success) {
         message = uploadResult.message || 'Ticket created, but image upload failed.';
         toastType = 'warning';
@@ -1951,6 +1976,12 @@ async function submitTicket() {
     }
 
     showToast(message, toastType);
+
+    // Clear the form
+    const form = document.getElementById('create-ticket-form');
+    if (form) form.reset();
+
+    // Reload tickets and navigate
     await loadUserTickets();
     refreshMyTicketsBadge();
     setTimeout(() => navigate('my-tickets'), 800);
