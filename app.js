@@ -781,6 +781,14 @@ async function deleteTicket(ticketId, ticketTitle) {
     const row = document.getElementById(`ticket-row-${ticketId}`);
     if (row) row.remove();
 
+    // Keep in-memory ticket arrays in sync so assign-worker uses fresh data
+    APP.allTickets = APP.allTickets.filter(t => String(t.raw_id || t.id).replace(/^TK-/, '') !== String(ticketId));
+    APP.tickets = APP.tickets.filter(t => String(t.raw_id || t.id).replace(/^TK-/, '') !== String(ticketId));
+
+    if (APP.currentPage === 'assign-worker') {
+      navigate('assign-worker');
+    }
+
   } catch (err) {
     showToast('Server error. Please try again.', 'error');
     console.error(err);
