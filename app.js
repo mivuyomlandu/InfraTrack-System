@@ -1718,7 +1718,7 @@ function renderAssignedJobs() {
     <div class="card-body" style="padding:0">
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Ticket ID</th><th>Title</th><th>Location</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Ticket ID</th><th>Title</th><th>Location</th><th>Priority</th><th>Job Status</th><th>View</th><th>Actions</th></tr></thead>
           <tbody>
             ${myJobs.map(t=>`
               <tr>
@@ -1726,7 +1726,6 @@ function renderAssignedJobs() {
                 <td>${t.title}</td>
                 <td>${t.location}</td>
                 <td>${priorityHtml(t.priority)}</td>
-                <td>${statusBadge(t.status)}</td>
                 <td>
                   <select class="form-control" style="width:130px;" onchange="updateJobStatus('${t.id}', this.value)">
                     <option value="assigned" ${t.status==='assigned'?'selected':''}>Assigned</option>
@@ -1735,6 +1734,8 @@ function renderAssignedJobs() {
                     <option value="rejected" ${t.status==='rejected'?'selected':''}>Rejected</option>
                   </select>
                 </td>
+                <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
+                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}')">Upload Picture</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -1783,6 +1784,25 @@ async function updateJobStatus(id, newStatus) {
     console.error('Ticket update error:', err);
     showToast('Could not save status change to server.', 'error');
   }
+}
+
+function triggerUploadPicture(ticketId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.style.display = 'none';
+  input.onchange = () => {
+    const file = input.files && input.files[0];
+    if (!file) {
+      input.remove();
+      return;
+    }
+    showToast(`Selected "${file.name}" for ticket ${ticketId}.`, 'success');
+    // TODO: upload the selected picture to the server once an upload endpoint exists.
+    input.remove();
+  };
+  document.body.appendChild(input);
+  input.click();
 }
 
 function renderAdminDashboard() {
