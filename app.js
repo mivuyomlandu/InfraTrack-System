@@ -6,7 +6,7 @@
 'use strict';
 
 // ── STATE ─────────────────────────────────────────────────────
-const API_URL = "http://localhost:3000";
+const API_URL = "http://105.228.61.32:3000";
 
 const APP = {
   currentUser: null,
@@ -166,9 +166,9 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = "http://localhost:3000";
+  const API_URL = "http://105.228.61.32:3000";
 
-  //localhost
+  //105.228.61.32
 
   // =========================
   // LOGIN HANDLER
@@ -621,7 +621,7 @@ function renderAdminDashboard() {
 
 async function renderAllTickets() {
   try {
-    const res = await fetch("http://localhost:3000/tickets");
+    const res = await fetch("http://105.228.61.32:3000/tickets");
     const data = await res.json();
 
     if (!data || !Array.isArray(data)) {
@@ -656,7 +656,7 @@ async function renderAllTickets() {
               ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` : 
                 data.map(t => `
                 <tr id="ticket-row-${t.ticket_id}">
-                  <td style="font-weight:700;color:var(--navy)">${t.id}</td>
+                  <td style="font-weight:700;color:var(--navy)">${t.ticket_id ? `TK-${t.ticket_id}` : '-'}</td>
                   <td>${t.title || '-'}</td>
                   <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description || '-'}</td>
                   <td>${priorityHtml(t.priority || 'medium')}</td>
@@ -1284,7 +1284,7 @@ async function submitTicket() {
   const pri   = (document.getElementById('t-priority')?.value || 'Medium');
   if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
 
-  const API_URL = "http://localhost:3000";
+  const API_URL = "http://105.228.61.32:3000";
 
   try {
     const res = await fetch(`${API_URL}/tickets`, {
@@ -1332,7 +1332,7 @@ async function handleUpdateAvailability(newStatus) {
 
   //Background network sync
   try {
-    const response = await fetch('http://localhost:3000/technician/status', {
+    const response = await fetch('http://105.228.61.32:3000/technician/status', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1359,7 +1359,7 @@ async function fetchTicketsForWorker() {
   if (!APP.currentUser) return; 
 
   try {
-    const response = await fetch(`http://localhost:3000/api/tickets?techId=${APP.currentUser.id}`);
+    const response = await fetch(`http://105.228.61.32:3000/api/tickets?techId=${APP.currentUser.id}`);
     const data = await response.json();
     
     // Update the global state
