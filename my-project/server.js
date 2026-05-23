@@ -56,10 +56,17 @@ app.post("/signup", (req, res) => {
 // Calling the route
 app.post("/user/update-status", (req, res) => {
   const { userId, status } = req.body;
-  
+  const validStatuses = ['Active', 'Inactive', 'On Leave'];
+  const normalizedStatus = String(status || '').trim();
+  const finalStatus = validStatuses.find(s => s.toLowerCase() === normalizedStatus.toLowerCase());
+
+  if (!finalStatus) {
+    return res.status(400).json({ success: false, message: 'Status must be one of Active, Inactive or On Leave' });
+  }
+
   const sql = "UPDATE technician SET technician_status = ? WHERE user_id = ?";
-  
-  db.query(sql, [status, userId], (err, result) => {
+
+  db.query(sql, [finalStatus, userId], (err, result) => {
     if (err) {
       console.error("Database error:", err);
       return res.status(500).json({ success: false, message: err.message });
