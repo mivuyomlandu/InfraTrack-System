@@ -1131,6 +1131,7 @@ const APP = {
   currentRole: null,
   currentPage: null,
   tickets: [],
+  allTickets: [],
   workers: [],
   locations: []  
 };
@@ -2074,7 +2075,7 @@ async function loadAppData() {
     const ticketRes  = await fetch(`${API_URL}/tickets`);
     const ticketData = await ticketRes.json();
 
-    APP.tickets = ticketData.map(t => ({
+    APP.allTickets = ticketData.map(t => ({
       id:         'TK-' + t.ticket_id,
       raw_id:     t.ticket_id,
       title:      t.title,
@@ -2420,12 +2421,19 @@ function bindPageEvents(page) {
 
 function formatTicketRow(row) {
   const ticketId = row.ticket_id || row.id;
+  const status = row.status ||
+    (row.status_id === 1 ? 'pending'
+      : row.status_id === 2 ? 'assigned'
+      : row.status_id === 3 ? 'inprogress'
+      : row.status_id === 4 ? 'completed'
+      : 'pending');
+
   return {
     id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
     title: row.title || '',
     category: row.category || row.asset_type || 'Other',
     location: row.location || `${row.street || ''}${row.suburb ? ', ' + row.suburb : ''}`.trim(),
-    status: row.status || 'pending',
+    status,
     priority: (String(row.priority || 'medium')).toLowerCase(),
     date: row.date ? String(row.date).split('T')[0] : '',
     worker: row.worker || null,
@@ -2495,7 +2503,7 @@ async function loadUserTickets() {
     // FIX 6: changed APP.currentUser.user_id to APP.currentUser.id in both endpoints
     let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`;
     
-    if (APP.currentRole === 'Technician') {
+    if (APP.currentRole === 'worker') {
       endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.id)}`;
     }
 
