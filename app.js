@@ -658,7 +658,7 @@ function renderAssignedJobs() {
                   </select>
                 </td>
                 <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
-                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}', '${t.status === 'completed' ? 'after' : 'before'}')">Upload ${t.status === 'completed' ? 'After' : 'Before'} Photo</button></td>
+                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}', 'after')">Upload After Photo</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -1813,25 +1813,42 @@ async function showTicketDetail(ticketId) {
   let imageHtml = '';
   try {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
-    const pictureTypes = [
-      { type: 'before', label: 'Before' },
-      { type: 'after', label: 'After' }
-    ];
     const imageBlocks = [];
+    const candidates = [
+      { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
+      { type: 'after', label: 'After Photo', ownerId: APP.currentUser?.id }
+    ].filter(c => c.ownerId);
 
-    for (const { type, label } of pictureTypes) {
-      const imageUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${type}`;
+    for (const candidate of candidates) {
+      let foundUrl = null;
+      const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
       try {
-        const checkRes = await fetch(imageUrl, { method: 'HEAD' });
+        const checkRes = await fetch(typeUrl, { method: 'HEAD' });
         if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-          imageBlocks.push(`
-            <div style="margin-top:1rem; text-align:center;">
-              <div style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem;">${label} Photo</div>
-              <img src="${imageUrl}" alt="${label} ticket photo" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-            </div>`);
+          foundUrl = typeUrl;
         }
       } catch (err) {
-        // continue to next candidate
+        // ignore and try fallback URL
+      }
+
+      if (!foundUrl) {
+        const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
+        try {
+          const checkRes = await fetch(altUrl, { method: 'HEAD' });
+          if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+            foundUrl = altUrl;
+          }
+        } catch (err) {
+          // ignore
+        }
+      }
+
+      if (foundUrl) {
+        imageBlocks.push(`
+          <div style="margin-top:1rem; text-align:center;">
+            <div style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem;">${candidate.label}</div>
+            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          </div>`);
       }
     }
 
@@ -1842,7 +1859,7 @@ async function showTicketDetail(ticketId) {
       for (const ownerId of ownerIds) {
         const imageUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${ownerId}`;
         try {
-          const checkRes = await fetch(imageUrl);
+          const checkRes = await fetch(imageUrl, { method: 'HEAD' });
           if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
             imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
             break;
