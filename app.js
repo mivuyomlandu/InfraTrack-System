@@ -1846,21 +1846,28 @@ function renderProfile() {
 // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
 async function showTicketDetail(ticketId) {
   let ticket = APP.tickets.find(t => t.id === ticketId);
-  if (!ticket) return;
 
-  if (!ticket.reporterName && ticketId) {
+  // If the ticket isn't in memory, fetch its full details from the API
+  if (!ticket) {
     try {
       const res = await fetch(`${API_URL}/tickets/id/${encodeURIComponent(ticketId)}`);
       const data = await res.json();
       if (data.success && data.ticket) {
         ticket = formatTicketRow(data.ticket);
-        const idx = APP.tickets.findIndex(t => t.id === ticketId);
-        if (idx !== -1) {
+        const idx = APP.tickets.findIndex(t => t.id === ticket.id);
+        if (idx === -1) {
+          APP.tickets.unshift(ticket);
+        } else {
           APP.tickets[idx] = ticket;
         }
+      } else {
+        showToast('Ticket not found.', 'error');
+        return;
       }
     } catch (err) {
-      console.warn('Unable to refresh ticket reporter details for', ticketId, err);
+      console.error('Failed to load ticket details:', err);
+      showToast('Unable to load ticket details right now.', 'error');
+      return;
     }
   }
 
