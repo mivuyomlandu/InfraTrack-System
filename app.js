@@ -7,6 +7,7 @@
 
 // ── STATE ─────────────────────────────────────────────────────
 const API_URL = "http://105.228.61.32:3000";
+const MONGO_API_URL = "http://105.228.61.32:3001";
 
 const APP = {
   currentUser: null,
@@ -657,7 +658,7 @@ function renderAssignedJobs() {
                   </select>
                 </td>
                 <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
-                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}')">Upload Picture</button></td>
+                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}', '${t.status === 'completed' ? 'after' : 'before'}')">Upload ${t.status === 'completed' ? 'After' : 'Before'} Photo</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -708,19 +709,27 @@ async function updateJobStatus(id, newStatus) {
   }
 }
 
-function triggerUploadPicture(ticketId) {
+async function triggerUploadPicture(ticketId, pictureType = 'before') {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.style.display = 'none';
-  input.onchange = () => {
+  input.onchange = async () => {
     const file = input.files && input.files[0];
     if (!file) {
       input.remove();
       return;
     }
-    showToast(`Selected "${file.name}" for ticket ${ticketId}.`, 'success');
-    // TODO: upload the selected picture to the server once an upload endpoint exists.
+
+    const typeLabel = pictureType === 'after' ? 'After' : 'Before';
+    showToast(`Uploading ${typeLabel.toLowerCase()} photo for ticket ${ticketId}...`, 'info');
+    const uploadResult = await uploadTicketImage(ticketId, file, pictureType);
+
+    if (uploadResult.success) {
+      showToast(`${typeLabel} photo uploaded for ticket ${ticketId}.`, 'success');
+    } else {
+      showToast(uploadResult.message || `Failed to upload ${typeLabel.toLowerCase()} photo.`, 'error');
+    }
     input.remove();
   };
   document.body.appendChild(input);
@@ -1804,17 +1813,43 @@ async function showTicketDetail(ticketId) {
   let imageHtml = '';
   try {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
-    const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
-    for (const ownerId of ownerIds) {
-      const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${ownerId}`;
+    const pictureTypes = [
+      { type: 'before', label: 'Before' },
+      { type: 'after', label: 'After' }
+    ];
+    const imageBlocks = [];
+
+    for (const { type, label } of pictureTypes) {
+      const imageUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${type}`;
       try {
-        const checkRes = await fetch(imageUrl);
+        const checkRes = await fetch(imageUrl, { method: 'HEAD' });
         if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-          imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
-          break;
+          imageBlocks.push(`
+            <div style="margin-top:1rem; text-align:center;">
+              <div style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem;">${label} Photo</div>
+              <img src="${imageUrl}" alt="${label} ticket photo" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+            </div>`);
         }
       } catch (err) {
         // continue to next candidate
+      }
+    }
+
+    if (imageBlocks.length > 0) {
+      imageHtml = imageBlocks.join('');
+    } else {
+      const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
+      for (const ownerId of ownerIds) {
+        const imageUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${ownerId}`;
+        try {
+          const checkRes = await fetch(imageUrl);
+          if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+            imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+            break;
+          }
+        } catch (err) {
+          // continue to next candidate
+        }
       }
     }
   } catch (err) {
@@ -1979,20 +2014,20 @@ async function loadUserTickets() {
   refreshWorkerJobsBadge();
 }
 
-async function uploadTicketImage(ticketId, file) {
+async function uploadTicketImage(ticketId, file, pictureType = 'before') {
   if (!file || !ticketId || !APP.currentUser?.id) {
     return { success: false, message: 'Missing required fields for image upload.' };
   }
 
   const formData = new FormData();
   formData.append('picture', file);
-  // Strip TK- prefix if present
   const cleanTicketId = String(ticketId).replace(/^TK-/, '');
   formData.append('ticket_id', cleanTicketId);
   formData.append('user_id', String(APP.currentUser.id));
+  formData.append('picture_type', pictureType);
 
   try {
-    const res = await fetch('http://105.228.61.32:3001/upload-picture', {
+    const res = await fetch(`${MONGO_API_URL}/upload-picture`, {
       method: 'POST',
       body: formData
     });
