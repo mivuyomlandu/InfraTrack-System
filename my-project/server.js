@@ -70,7 +70,7 @@ app.get("/locations", (req, res) => {
 // 🎫 GET ALL TICKETS
 // ────────────────────────────────────────────
 app.get("/tickets", (req, res) => {
-  db.query("SELECT * FROM ticket ORDER BY id DESC", (err, result) => {
+  db.query("SELECT * FROM ticket ", (err, result) => {
     if (err) {
       return res.status(500).json(err);
     }
@@ -224,7 +224,87 @@ app.put("/tickets/:id", (req, res) => {
     res.json({ success: true, message: "Ticket updated" });
   });
 });
+// ────────────────────────────────────────────
+// 👷 GET ALL ACTIVE TECHNICIANS
+// ────────────────────────────────────────────
+app.get("/technicians", (req, res) => {
+  const sql = `
+    SELECT 
+      t.technician_id,
+      t.skill_type,
+      t.technician_status,
+      u.name,
+      u.surname,
+      u.email
+    FROM technician t
+    JOIN users u ON t.user_id = u.user_id
+    WHERE t.technician_status = 'Active'
+    ORDER BY u.name ASC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, technicians: result });
+  });
+});
 
+// ────────────────────────────────────────────
+// 👷 ASSIGN TICKET TO TECHNICIAN
+// ────────────────────────────────────────────
+app.post("/assign-ticket", (req, res) => {
+  const { ticket_id, technician_id } = req.body;
+
+  // status_id 2 = assigned
+  const sql = `
+    UPDATE ticket 
+    SET technician_id = ?, status_id = 2 
+    WHERE ticket_id = ?
+  `;
+  db.query(sql, [technician_id, ticket_id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) {
+      return res.json({ success: false, message: "Ticket not found" });
+    }
+    res.json({ success: true, message: "Ticket assigned successfully" });
+  });
+});
+// ────────────────────────────────────────────
+// ✏️ UPDATE USER DETAILS
+// ────────────────────────────────────────────
+app.put("/users/:id", (req, res) => {
+  const { name, surname, email, cellphone, password } = req.body;
+  const sql = `
+    UPDATE users 
+    SET name = ?, surname = ?, email = ?, cellphone = ?, password = ?
+    WHERE user_id = ?
+  `;
+  db.query(sql, [name, surname, email, cellphone, password, req.params.id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.json({ success: false, message: "User not found" });
+    res.json({ success: true, message: "User updated successfully" });
+  });
+});
+// ────────────────────────────────────────────
+// 🗑️ DELETE USER
+// ────────────────────────────────────────────
+app.delete("/users/:id", (req, res) => {
+  const sql = "DELETE FROM users WHERE user_id = ?";
+  db.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.json({ success: false, message: "User not found" });
+    res.json({ success: true, message: "User deleted successfully" });
+  });
+});
+// ────────────────────────────────────────────
+// 🗑️ DELETE TICKET
+// ────────────────────────────────────────────
+app.delete("/tickets/:id", (req, res) => {
+  const sql = "DELETE FROM ticket WHERE ticket_id = ?";
+  db.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.json({ success: false, message: "Ticket not found" });
+    res.json({ success: true, message: "Ticket deleted successfully" });
+  });
+});
 app.listen(3000, "0.0.0.0", () => {
   console.log("Server running on port 3000");
 });

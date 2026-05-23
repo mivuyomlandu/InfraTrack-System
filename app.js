@@ -6,21 +6,15 @@
 'use strict';
 
 // ── STATE ─────────────────────────────────────────────────────
-const API_URL = "http://105.228.61.32:3000";
+const API_URL = "http://localhost:3000";
 
 const APP = {
   currentUser: null,
   currentRole: null,
   currentPage: null,
-  locations: [],
   tickets: [],
-  workers: [
-    { id:'W001', name:'Musa Dlamini',    dept:'Water & Sanitation', active:3 },
-    { id:'W002', name:'Thabo Nkosi',     dept:'Roads & Transport',  active:2 },
-    { id:'W003', name:'Jerome Sithole',  dept:'Waste Management',   active:1 },
-    { id:'W004', name:'Zanele Mokoena',  dept:'Electrical',         active:4 },
-    { id:'W005', name:'Sipho Mahlangu',  dept:'Water & Sanitation', active:0 },
-  ]
+  workers: [],
+  locations: []  
 };
 
 // Initialize Application Lifecycles once DOM contents are ready
@@ -172,9 +166,9 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = "http://105.228.61.32:3000";
+  const API_URL = "http://localhost:3000";
 
-  //105.228.61.32
+  //localhost
 
   // =========================
   // LOGIN HANDLER
@@ -296,6 +290,11 @@ async function loadApp() {
 
   await loadLocations();
   await loadUserTickets();
+  try {
+  await loadAppData();
+  } catch (err) {
+  console.error('loadAppData failed:', err);
+  }
   buildSidebar();
 
   const defaultPage = {
@@ -622,7 +621,7 @@ function renderAdminDashboard() {
 
 async function renderAllTickets() {
   try {
-    const res = await fetch("http://105.228.61.32:3000/tickets");
+    const res = await fetch("http://localhost:3000/tickets");
     const data = await res.json();
 
     if (!data || !Array.isArray(data)) {
@@ -650,12 +649,13 @@ async function renderAllTickets() {
                 <th>Asset ID</th>
                 <th>User ID</th>
                 <th>Date Created</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` : 
                 data.map(t => `
-                <tr>
+                <tr id="ticket-row-${t.ticket_id}">
                   <td style="font-weight:700;color:var(--navy)">${t.id}</td>
                   <td>${t.title || '-'}</td>
                   <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description || '-'}</td>
@@ -663,7 +663,12 @@ async function renderAllTickets() {
                   <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : 'completed')}</td>
                   <td>${t.asset_id || '-'}</td>
                   <td>${t.user_id || '-'}</td>
-                  <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
+                 <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
+                 <td>
+                 <button class="btn btn-sm btn-danger" onclick="deleteTicket(${t.ticket_id}, '${t.title?.replace(/'/g, '')}')">
+                 Delete
+                 </button>
+                 </td>
                 </tr>`).join('')}
             </tbody>
           </table>
@@ -676,10 +681,246 @@ async function renderAllTickets() {
     return `<div class="card"><div class="card-body">Server error: ${err.message}</div></div>`;
   }
 }
-function renderAssignWorker() { return `<div class="card"><div class="card-body"><h3>Assign Contractor Task Matrix</h3></div></div>`; }
+async function deleteTicket(ticketId, ticketTitle) {
+  const confirmed = confirm(`Are you sure you want to delete ticket #${ticketId}: "${ticketTitle}"? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${ticketId}`, {
+      method: 'DELETE'
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Delete failed: ' + data.message, 'error');
+      return;
+    }
+
+    showToast(`🗑️ Ticket #${ticketId} deleted successfully.`, 'success');
+
+    // Remove the row instantly without reloading
+    const row = document.getElementById(`ticket-row-${ticketId}`);
+    if (row) row.remove();
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
+  }
+}
+function renderAssignWorker() {
+  const unassigned = APP.tickets.filter(t => t.status === 'pending');
+  const assigned   = APP.tickets.filter(t => t.worker !== null);
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">Assign Workers</div>
+      <div class="page-subtitle">Assign open tickets to active contractors.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Unassigned Tickets (${unassigned.length})</span>
+    </div>
+    <div class="card-body" style="padding:0">
+      ${unassigned.length === 0
+        ? `<div style="padding:2rem;text-align:center;color:#888">
+              No pending tickets at the moment.
+           </div>`
+        : `<div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>Title</th>
+                  <th>Location</th>
+                  <th>Priority</th>
+                  <th>Assign To</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${unassigned.map(t => `
+                <tr id="row-${t.id}">
+                  <td style="font-weight:700;color:var(--navy)">${t.id}</td>
+                  <td>${t.title}</td>
+                  <td style="font-size:0.8rem">${t.location}</td>
+                  <td>${priorityHtml(t.priority)}</td>
+                  <td>
+                    <select class="form-control" id="select-${t.id}" style="width:200px;">
+                      <option value="">— Select Contractor —</option>
+                      ${APP.workers.map(w => `
+                        <option value="${w.id}">
+                          ${w.name} · ${w.skill}
+                        </option>
+                      `).join('')}
+                    </select>
+                  </td>
+                  <td>
+                    <button 
+                      class="btn btn-sm btn-primary" 
+                      onclick="assignTicket('${t.id}', ${t.raw_id})">
+                      Assign
+                    </button>
+                  </td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`
+      }
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1.5rem">
+    <div class="card-header">
+      <span class="card-title">Already Assigned (${assigned.length})</span>
+    </div>
+    <div class="card-body" style="padding:0">
+      ${assigned.length === 0
+        ? `<div style="padding:2rem;text-align:center;color:#888">
+              No assigned tickets yet.
+           </div>`
+        : `<div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>Title</th>
+                  <th>Location</th>
+                  <th>Priority</th>
+                  <th>Assigned To</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${assigned.map(t => `
+                <tr>
+                  <td style="font-weight:700;color:var(--navy)">${t.id}</td>
+                  <td>${t.title}</td>
+                  <td style="font-size:0.8rem">${t.location}</td>
+                  <td>${priorityHtml(t.priority)}</td>
+                  <td>👷 ${t.workerName || 'Technician #' + t.worker}</td>
+                  <td>${statusBadge(t.status)}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>`
+      }
+    </div>
+  </div>`;
+}
+async function assignTicket(appId, rawId) {
+  const select   = document.getElementById(`select-${appId}`);
+  const workerId = select ? select.value : '';
+
+  if (!workerId) {
+    showToast('Please select a contractor first.', 'error');
+    return;
+  }
+
+  const worker = APP.workers.find(w => w.id === workerId);
+  const ticket = APP.tickets.find(t => t.id === appId);
+  if (!worker || !ticket) return;
+
+  try {
+    const res = await fetch(`${API_URL}/assign-ticket`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ticket_id: rawId, technician_id: workerId })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Assignment failed: ' + data.message, 'error');
+      return;
+    }
+
+    // Update local state immediately
+    ticket.worker     = workerId;
+    ticket.workerName = worker.name;
+    ticket.status     = 'assigned';
+
+    showToast(`✅ ${appId} assigned to ${worker.name}`, 'success');
+    navigate('assign-worker');
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
+  }
+}
+/*function assignTicket(ticketId) {
+  const select = document.getElementById(`select-${ticketId}`);
+  const workerId = select.value;
+
+  if (!workerId) {
+    showToast('Please select a contractor first.', 'error');
+    return;
+  }
+
+  // Find the worker and ticket
+  const worker = APP.workers.find(w => w.id === workerId);
+  const ticket = APP.tickets.find(t => t.id === ticketId);
+
+  if (!worker || !ticket) return;
+
+  // Update the ticket
+  ticket.worker = worker.name;
+  ticket.status = 'assigned';
+
+  // Increase worker active count
+  worker.active += 1;
+
+  showToast(`✅ ${ticketId} assigned to ${worker.name}`, 'success');
+
+  // Refresh the page to reflect changes
+  navigate('assign-worker');
+}*/
+async function loadAppData() {
+  try {
+    // Load all tickets
+    const ticketRes  = await fetch(`${API_URL}/tickets`);
+    const ticketData = await ticketRes.json();
+
+    APP.tickets = ticketData.map(t => ({
+      id:         'TK-' + t.ticket_id,
+      raw_id:     t.ticket_id,
+      title:      t.title,
+      category:   t.asset_type || 'Other',
+      location:   t.location   || 'Unknown',
+      priority:   (t.priority  || 'Medium').toLowerCase(),
+      status:     t.status_id === 1 ? 'pending'
+                : t.status_id === 2 ? 'assigned'
+                : t.status_id === 3 ? 'inprogress'
+                : t.status_id === 4 ? 'completed'
+                : 'pending',
+      date:       t.date_created ? t.date_created.split('T')[0] : '',
+      worker:     t.technician_id ? String(t.technician_id) : null,
+      workerName: t.technician_name || null,
+      desc:       t.description || ''
+    }));
+
+    // Load active technicians
+    const techRes  = await fetch(`${API_URL}/technicians`);
+    const techData = await techRes.json();
+
+    APP.workers = techData.technicians.map(t => ({
+      id:    String(t.technician_id),
+      name:  t.name + ' ' + t.surname,
+      skill: t.skill_type || 'General',
+      dept:  t.skill_type || 'Technician'
+    }));
+
+  } catch (err) {
+    showToast('Failed to load data from server.', 'error');
+    console.error(err);
+  }
+}
 async function renderManageUsers() {
   try {
-    const res = await fetch("http://105.228.61.32:3000/users");
+    const res  = await fetch(`${API_URL}/users`);
     const data = await res.json();
 
     if (!data.success) {
@@ -699,25 +940,34 @@ async function renderManageUsers() {
           <table>
             <thead>
               <tr>
-                <th>User ID</th>
+                <th>ID</th>
                 <th>Name</th>
                 <th>Surname</th>
                 <th>Email</th>
                 <th>Cellphone</th>
                 <th>Password</th>
                 <th>Role</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
               ${data.users.map(u => `
-                <tr>
+                <tr id="user-row-${u.user_id}">
                   <td style="font-weight:700;color:var(--navy)">${u.user_id}</td>
-                  <td>${u.name}</td>
-                  <td>${u.surname}</td>
-                  <td>${u.email}</td>
-                  <td>${u.cellphone || '-'}</td>
-                  <td>${u.password}</td>
+                  <td><input class="form-control" id="u-name-${u.user_id}"      value="${u.name}"           style="min-width:90px"></td>
+                  <td><input class="form-control" id="u-surname-${u.user_id}"   value="${u.surname}"        style="min-width:90px"></td>
+                  <td><input class="form-control" id="u-email-${u.user_id}"     value="${u.email}"          style="min-width:150px"></td>
+                  <td><input class="form-control" id="u-cellphone-${u.user_id}" value="${u.cellphone || ''}" style="min-width:110px"></td>
+                  <td><input class="form-control" id="u-password-${u.user_id}"  value="${u.password}"       style="min-width:110px"></td>
                   <td>${u.role}</td>
+                  <td>
+                    <button class="btn btn-sm btn-primary" onclick="saveUserEdit(${u.user_id})">
+                     Save
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteUser(${u.user_id}, '${u.name} ${u.surname}')" style="margin-left:6px">
+                     Delete
+                    </button>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
@@ -728,6 +978,66 @@ async function renderManageUsers() {
 
   } catch (err) {
     return `<div class="card"><div class="card-body">Server error loading users.</div></div>`;
+  }
+}
+async function deleteUser(userId, userName) {
+  const confirmed = confirm(`Are you sure you want to delete ${userName}? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'DELETE'
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Delete failed: ' + data.message, 'error');
+      return;
+    }
+
+    showToast(`🗑️ ${userName} has been deleted.`, 'success');
+
+    // Remove the row from the table instantly without reloading
+    const row = document.getElementById(`user-row-${userId}`);
+    if (row) row.remove();
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
+  }
+}
+async function saveUserEdit(userId) {
+  const name      = document.getElementById(`u-name-${userId}`)?.value.trim();
+  const surname   = document.getElementById(`u-surname-${userId}`)?.value.trim();
+  const email     = document.getElementById(`u-email-${userId}`)?.value.trim();
+  const cellphone = document.getElementById(`u-cellphone-${userId}`)?.value.trim();
+  const password  = document.getElementById(`u-password-${userId}`)?.value.trim();
+
+  if (!name || !surname || !email || !password) {
+    showToast('Name, surname, email and password are required.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/users/${userId}`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ name, surname, email, cellphone, password })
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Update failed: ' + data.message, 'error');
+      return;
+    }
+
+    showToast(`✅ User #${userId} updated successfully`, 'success');
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
   }
 }
 function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
@@ -946,7 +1256,7 @@ async function loadUserTickets() {
   try {
     let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.id)}`;
     
-    if (APP.currentRole === 'worker') {
+    if (APP.currentRole === 'Technician') {
       endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.id)}`;
     }
 
@@ -974,7 +1284,7 @@ async function submitTicket() {
   const pri   = (document.getElementById('t-priority')?.value || 'Medium');
   if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
 
-  const API_URL = "http://105.228.61.32:3000";
+  const API_URL = "http://localhost:3000";
 
   try {
     const res = await fetch(`${API_URL}/tickets`, {
@@ -1022,7 +1332,7 @@ async function handleUpdateAvailability(newStatus) {
 
   //Background network sync
   try {
-    const response = await fetch('http://105.228.61.32:3000/technician/status', {
+    const response = await fetch('http://localhost:3000/technician/status', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -1049,7 +1359,7 @@ async function fetchTicketsForWorker() {
   if (!APP.currentUser) return; 
 
   try {
-    const response = await fetch(`http://105.228.61.32:3000/api/tickets?techId=${APP.currentUser.id}`);
+    const response = await fetch(`http://localhost:3000/api/tickets?techId=${APP.currentUser.id}`);
     const data = await response.json();
     
     // Update the global state
