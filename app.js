@@ -1197,8 +1197,8 @@ function showToast(msg, type='info') {
 
 // ── STATUS BADGE HTML ──────────────────────────────────────────
 function statusBadge(s) {
-  const map = { pending:'badge-pending', assigned:'badge-assigned', inprogress:'badge-inprogress', completed:'badge-completed' };
-  const label = { pending:'Pending', assigned:'Assigned', inprogress:'In Progress', completed:'Completed' };
+  const map = { pending:'badge-pending', assigned:'badge-assigned', inprogress:'badge-inprogress', completed:'badge-completed', rejected:'badge-rejected' };
+  const label = { pending:'Pending', assigned:'Assigned', inprogress:'In Progress', completed:'Completed', rejected:'Rejected' };
   return `<span class="badge ${map[s]||''}">${label[s]||s}</span>`;
 }
 
@@ -1732,6 +1732,7 @@ function renderAssignedJobs() {
                     <option value="assigned" ${t.status==='assigned'?'selected':''}>Assigned</option>
                     <option value="inprogress" ${t.status==='inprogress'?'selected':''}>In Progress</option>
                     <option value="completed" ${t.status==='completed'?'selected':''}>Completed</option>
+                    <option value="rejected" ${t.status==='rejected'?'selected':''}>Rejected</option>
                   </select>
                 </td>
               </tr>
@@ -1743,19 +1744,44 @@ function renderAssignedJobs() {
   </div>`;
 }
 
-function updateJobStatus(id, newStatus) {
+async function updateJobStatus(id, newStatus) {
   const t = APP.tickets.find(tick => tick.id === id);
-  if(t) {
+  if (!t) {
+    showToast(`Task ${id} not found.`, 'error');
+    return;
+  }
+
+  const cleanId = String(id).startsWith('TK-') ? id.slice(3) : id;
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${cleanId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast(data.message || 'Could not update ticket status.', 'error');
+      return;
+    }
+
     t.status = newStatus;
+    if (data.status_id) {
+      t.status_id = data.status_id;
+    }
+
     showToast(`Task ${id} moved to status: ${newStatus}`, 'success');
-    
-    refreshWorkerJobsBadge(); 
+    refreshWorkerJobsBadge();
     refreshMyTicketsBadge();
-    
+
     if (APP.currentPage === 'assigned-jobs') {
       const main = document.getElementById('main-content');
       if (main) main.innerHTML = `<div class="page">${renderAssignedJobs()}</div>`;
     }
+  } catch (err) {
+    console.error('Ticket update error:', err);
+    showToast('Could not save status change to server.', 'error');
   }
 }
 
@@ -1803,7 +1829,7 @@ async function renderAllTickets() {
                   <td>${t.title || '-'}</td>
                   <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description || '-'}</td>
                   <td>${priorityHtml(t.priority || 'medium')}</td>
-                  <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : 'completed')}</td>
+                  <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : t.status_id == 4 ? 'completed' : t.status_id == 5 ? 'rejected' : 'pending')}</td>
                   <td>${t.asset_id || '-'}</td>
                   <td>${t.user_id || '-'}</td>
                   <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
@@ -2047,7 +2073,7 @@ function bindPageEvents(page) {
 }
 
 function formatTicketRow(row) {
-  const ticketId = row.ticket_id || row.id || '';
+  const ticketId = row.ticket_id || row.id;
   return {
     id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
     title: row.title || '',
