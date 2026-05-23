@@ -24,7 +24,16 @@ db.connect(err => {
 
 app.post("/login", (req, res) => {
   const { email, password } = req.body;
-  const sql = "SELECT * FROM users WHERE email = ? AND password = ?";
+  const sql = `
+  SELECT 
+    users.*,
+    technician.technician_status
+  FROM users
+  LEFT JOIN technician 
+    ON users.user_id = technician.user_id
+  WHERE users.email = ? 
+    AND users.password = ?
+`;
   db.query(sql, [email, password], (err, result) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.length > 0) {
@@ -44,6 +53,28 @@ app.post("/signup", (req, res) => {
   });
 });
 
+// Calling the route
+app.post("/user/update-status", (req, res) => {
+  const { userId, status } = req.body;
+  const validStatuses = ['Active', 'Inactive', 'On Leave'];
+  const normalizedStatus = String(status || '').trim();
+  const finalStatus = validStatuses.find(s => s.toLowerCase() === normalizedStatus.toLowerCase());
+
+  if (!finalStatus) {
+    return res.status(400).json({ success: false, message: 'Status must be one of Active, Inactive or On Leave' });
+  }
+
+  const sql = "UPDATE technician SET technician_status = ? WHERE user_id = ?";
+
+  db.query(sql, [finalStatus, userId], (err, result) => {
+    if (err) {
+      console.error("Database error:", err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    res.json({ success: true, message: "Status updated successfully" });
+  });
+});
+
 app.get("/users", (req, res) => {
   const sql = "SELECT user_id, name, surname, email, cellphone, password, role FROM users";
   db.query(sql, (err, result) => {
@@ -53,15 +84,33 @@ app.get("/users", (req, res) => {
 });
 
 app.get("/locations", (req, res) => {
-  const sql = "SELECT location_id, street, suburb FROM location ORDER BY suburb ASC, street ASC";
+  const sql = `
+    SELECT
+      l.location_id,
+      l.street,
+      l.suburb,
+      GROUP_CONCAT(DISTINCT COALESCE(a.asset_type, 'Other') ORDER BY COALESCE(a.asset_type, 'Other') SEPARATOR ',') AS asset_types
+    FROM location l
+    INNER JOIN asset a ON l.location_id = a.location_id
+    GROUP BY l.location_id
+    ORDER BY l.suburb ASC, l.street ASC
+  `;
+
   db.query(sql, (err, result) => {
     if (err) {
       return res.status(500).json({ success: false, message: err.message });
     }
 
+    const locations = result.map(row => ({
+      location_id: row.location_id,
+      street: row.street,
+      suburb: row.suburb,
+      asset_types: row.asset_types ? row.asset_types.split(',').map(type => type.trim()) : []
+    }));
+
     res.json({
       success: true,
-      locations: result
+      locations
     });
   });
 });
@@ -148,8 +197,12 @@ app.get("/tickets/technician/:tech_id", (req, res) => {
 // ────────────────────────────────────────────
 app.get("/tickets/id/:ticketId", (req, res) => {
   let ticketId = req.params.ticketId;
-  if (ticketId.startsWith('TK-')) {
+  if (ticketId && ticketId.startsWith('TK-')) {
     ticketId = ticketId.slice(3);
+  }
+
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
   }
 
   const sql = `
@@ -165,7 +218,7 @@ app.get("/tickets/id/:ticketId", (req, res) => {
     FROM ticket t
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
-    WHERE t.user_id = ?
+    WHERE t.ticket_id = ?
     LIMIT 1
   `;
 
@@ -218,10 +271,31 @@ app.post("/tickets", (req, res) => {
 
 app.put("/tickets/:id", (req, res) => {
   const { status } = req.body;
-  const sql = "UPDATE ticket SET status = ? WHERE id = ?";
-  db.query(sql, [status, req.params.id], (err, result) => {
-    if (err) return res.status(500).json(err);
-    res.json({ success: true, message: "Ticket updated" });
+  const statusMap = {
+    pending: 1,
+    assigned: 2,
+    inprogress: 3,
+    completed: 4,
+    rejected: 5
+  };
+
+  const statusId = statusMap[String(status).toLowerCase()];
+  if (!statusId) {
+    return res.status(400).json({ success: false, message: "Invalid ticket status" });
+  }
+
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
+  db.query(sql, [statusId, ticketId], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, status_id: statusId, message: "Ticket status updated" });
   });
 });
 // ────────────────────────────────────────────
