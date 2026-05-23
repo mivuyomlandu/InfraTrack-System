@@ -309,6 +309,52 @@ app.get("/tickets", (req, res) => {
   });
 });
 
+app.get("/tickets/status/:statusId", (req, res) => {
+  const statusId = Number(req.params.statusId);
+  if (![1, 2, 3, 4, 5].includes(statusId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket status filter' });
+  }
+
+  const sql = `
+    SELECT
+      t.ticket_id,
+      t.user_id,
+      t.technician_id,
+      t.title,
+      t.priority,
+      t.status_id
+    FROM ticket t
+    WHERE t.status_id = ?
+    ORDER BY t.ticket_id DESC
+  `;
+
+  db.query(sql, [statusId], (err, result) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    res.json({ success: true, tickets: result });
+  });
+});
+
+app.put("/tickets/:id/complete", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  const sql = `UPDATE ticket SET completion_date = CURDATE(), status_id = 4 WHERE ticket_id = ?`;
+  db.query(sql, [ticketId], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+    res.json({ success: true, message: 'Ticket completion updated' });
+  });
+});
+
 // ────────────────────────────────────────────
 // 🎫 GET TICKETS BY USER
 // ────────────────────────────────────────────

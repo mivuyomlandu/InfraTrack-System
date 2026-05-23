@@ -1650,7 +1650,48 @@ async function saveUserEdit(userId) {
 }
 function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
 
-function renderNotifications() {
+async function renderNotifications() {
+  if (APP.currentRole === 'admin') {
+    let tickets = [];
+    try {
+      const res = await fetch(`${API_URL}/tickets/status/4`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        tickets = data.tickets;
+      }
+    } catch (err) {
+      console.error('Failed to load admin notifications:', err);
+    }
+
+    return `
+      <div class="page-header">
+        <div><div class="page-title">Notifications Hub</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Completed Tickets</span></div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Ticket ID</th><th>User ID</th><th>Technician ID</th><th>Title</th><th>Priority</th><th>View</th><th>Complete</th></tr></thead>
+              <tbody>
+                ${tickets.map(t => `
+                  <tr id="admin-notice-${t.ticket_id}">
+                    <td style="font-weight:700;color:var(--navy)">TK-${t.ticket_id}</td>
+                    <td>${t.user_id || '-'}</td>
+                    <td>${t.technician_id || '-'}</td>
+                    <td>${t.title || '-'}</td>
+                    <td>${priorityHtml(t.priority || 'medium')}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button></td>
+                    <td><button class="btn btn-sm btn-primary" onclick="completeTicket('${t.ticket_id}')">Complete</button></td>
+                  </tr>
+                `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem;">No completed tickets found.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
   const isWorker = APP.currentRole === 'worker';
 
   const myRelevantData = APP.tickets.filter(t =>
@@ -1709,6 +1750,29 @@ function renderNotifications() {
         `).join('')}
       </div>
     </div>`;
+}
+
+async function completeTicket(ticketId) {
+  if (!ticketId) return;
+  const cleanTicketId = String(ticketId).replace(/^TK-/, '');
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${encodeURIComponent(cleanTicketId)}/complete`, {
+      method: 'PUT'
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast(data.message || 'Unable to complete ticket.', 'error');
+      return;
+    }
+
+    showToast(`Ticket TK-${cleanTicketId} marked complete.`, 'success');
+    navigate('notifications');
+  } catch (err) {
+    console.error('Complete ticket error:', err);
+    showToast('Unable to complete the ticket right now.', 'error');
+  }
 }
 
 function renderProfile() {
@@ -1845,15 +1909,15 @@ async function showTicketDetail(ticketId) {
 
       if (foundUrl) {
         imageBlocks.push(`
-          <div style="flex:1 1 320px; min-width:280px; text-align:center;">
-            <div style="font-size:0.95rem; font-weight:700; margin-bottom:0.5rem;">${candidate.label}</div>
-            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}" style="width:100%; height:auto; max-height:320px; object-fit:contain; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+          <div class="ticket-image-card">
+            <div class="ticket-image-label">${candidate.label}</div>
+            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}">
           </div>`);
       }
     }
 
     if (imageBlocks.length > 0) {
-      imageHtml = `<div style="display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; margin-top:1rem;">${imageBlocks.join('')}</div>`;
+      imageHtml = `<div class="ticket-image-grid">${imageBlocks.join('')}</div>`;
     } else {
       const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
       for (const ownerId of ownerIds) {
@@ -1877,7 +1941,7 @@ async function showTicketDetail(ticketId) {
   const reporterInfo = reporterName ? `${reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
-      <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal large" onclick="event.stopPropagation()">
         <div class="modal-header">
           <div class="modal-title">Fault Summary: ${ticket.id}</div>
           <button class="modal-close" onclick="closeTicketModal()">&times;</button>
