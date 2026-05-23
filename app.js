@@ -3,7 +3,7 @@
    Main Application JavaScript
    ================================================================ */
 
-'use strict';
+'use strict';   //105.228.61.32
 
 // ── STATE ─────────────────────────────────────────────────────
 const API_URL = "http://105.228.61.32:3000";
@@ -1767,8 +1767,39 @@ function renderProfile() {
 
 // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
 async function showTicketDetail(ticketId) {
-  const ticket = APP.tickets.find(t => t.id === ticketId);
+  let ticket = APP.tickets.find(t => t.id === ticketId);
   if (!ticket) return;
+
+  if (!ticket.reporterName && ticketId) {
+    try {
+      const res = await fetch(`${API_URL}/tickets/id/${encodeURIComponent(ticketId)}`);
+      const data = await res.json();
+      if (data.success && data.ticket) {
+        ticket = formatTicketRow(data.ticket);
+        const idx = APP.tickets.findIndex(t => t.id === ticketId);
+        if (idx !== -1) {
+          APP.tickets[idx] = ticket;
+        }
+      }
+    } catch (err) {
+      console.warn('Unable to refresh ticket reporter details for', ticketId, err);
+    }
+  }
+
+  if (!ticket.reporterName && ticket.user_id) {
+    try {
+      const res = await fetch(`${API_URL}/users`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        const user = data.users.find(u => String(u.user_id) === String(ticket.user_id));
+        if (user) {
+          ticket.reporterName = `${user.name || ''} ${user.surname || ''}`.trim() || user.email || `User #${user.user_id}`;
+        }
+      }
+    } catch (err) {
+      console.warn('Unable to load reporter name from users list for', ticket.user_id, err);
+    }
+  }
 
   let imageHtml = '';
   try {
@@ -1790,7 +1821,8 @@ async function showTicketDetail(ticketId) {
     console.log('No image for ticket', ticketId);
   }
 
-  const reporterInfo = ticket.reporterName ? `${ticket.reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
+  const reporterName = ticket.reporterName || (ticket.user_id && String(ticket.user_id) === String(APP.currentUser?.id) ? APP.currentUser.name : null);
+  const reporterInfo = reporterName ? `${reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
       <div class="modal" onclick="event.stopPropagation()">
@@ -1858,8 +1890,8 @@ function formatTicketRow(row) {
     worker: row.worker || null,
     technician_id: row.technician_id != null ? String(row.technician_id) : (row.technicianId != null ? String(row.technicianId) : null),
     user_id: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
-    reporterId: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
-    reporterName: row.reporter_name || row.user_name || row.name || row.reporter || row.requester || null,
+    reporterId: row.reporter_id || row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterName: row.reporter_name || `${row.name || ''} ${row.surname || ''}`.trim() || row.user_name || row.reporter || row.requester || null,
     desc: row.description || row.desc || ''
   };
 }

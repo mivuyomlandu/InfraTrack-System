@@ -322,8 +322,11 @@ app.get("/tickets/user/:user_id", (req, res) => {
       t.status_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
-      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.user_id = ?
@@ -358,8 +361,11 @@ app.get("/tickets/technician/:tech_id", (req, res) => {
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
       CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
-      t.technician_id
+      t.technician_id,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.technician_id = ?
@@ -396,8 +402,11 @@ app.get("/tickets/id/:ticketId", (req, res) => {
       t.status_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
-      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.ticket_id = ?
