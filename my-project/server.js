@@ -119,9 +119,26 @@ app.get("/locations", (req, res) => {
 // 🎫 GET ALL TICKETS
 // ────────────────────────────────────────────
 app.get("/tickets", (req, res) => {
-  db.query("SELECT * FROM ticket ", (err, result) => {
+  const sql = `
+    SELECT
+      t.ticket_id,
+      t.title,
+      t.description,
+      t.priority,
+      t.status_id,
+      t.technician_id,
+      DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date_created,
+      COALESCE(a.asset_type, 'Other') AS asset_type,
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
+    FROM ticket t
+    LEFT JOIN asset a ON t.asset_id = a.asset_id
+    LEFT JOIN location l ON a.location_id = l.location_id
+    ORDER BY t.ticket_id DESC
+  `;
+
+  db.query(sql, (err, result) => {
     if (err) {
-      return res.status(500).json(err);
+      return res.status(500).json({ success: false, message: err.message });
     }
     res.json(result);
   });
