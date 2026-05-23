@@ -1993,7 +1993,7 @@ function renderAssignWorker() {
                   <td>${t.title}</td>
                   <td style="font-size:0.8rem">${t.location}</td>
                   <td>${priorityHtml(t.priority)}</td>
-                  <td>👷 ${t.workerName || 'Technician #' + t.worker}</td>
+                  <td>👷 ${resolveWorkerName(t) || 'Technician #' + t.worker}</td>
                   <td>${statusBadge(t.status)}</td>
                 </tr>`).join('')}
               </tbody>
@@ -2115,6 +2115,14 @@ async function loadAppData() {
     console.error(err);
   }
 }
+
+function resolveWorkerName(ticket) {
+  if (ticket.workerName) return ticket.workerName;
+  if (!ticket.worker) return null;
+  const worker = APP.workers.find(w => String(w.id) === String(ticket.worker));
+  return worker ? worker.name : null;
+}
+
 async function renderManageUsers() {
   try {
     const res  = await fetch(`${API_URL}/users`);
