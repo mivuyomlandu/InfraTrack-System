@@ -1,1121 +1,3 @@
-// /* ================================================================
-//    City of Johannesburg – Public Works System
-//    Main Application JavaScript
-//    ================================================================ */
-
-// 'use strict';
-
-// // ── STATE ─────────────────────────────────────────────────────
-// const API_URL = "http://105.228.61.32:3000";
-
-// const APP = {
-//   currentUser: null,
-//   currentRole: null,
-//   currentPage: null,
-//   locations: [],
-//   tickets: [],
-//   workers: [
-//     { id:'W001', name:'Musa Dlamini',    dept:'Water & Sanitation', active:3 },
-//     { id:'W002', name:'Thabo Nkosi',     dept:'Roads & Transport',  active:2 },
-//     { id:'W003', name:'Jerome Sithole',  dept:'Waste Management',   active:1 },
-//     { id:'W004', name:'Zanele Mokoena',  dept:'Electrical',         active:4 },
-//     { id:'W005', name:'Sipho Mahlangu',  dept:'Water & Sanitation', active:0 },
-//   ]
-// };
-
-// // Initialize Application Lifecycles once DOM contents are ready
-// document.addEventListener('DOMContentLoaded', () => {
-//   initGlobalAuthHandlers();
-// });
-
-// // ── SCREEN NAVIGATION CONTROLLER ─────────────────────────────
-// function showScreen(screenId) {
-//   document.querySelectorAll('.screen-view').forEach(view => {
-//     view.classList.add('hidden');
-//   });
-//   const targetedView = document.getElementById(screenId);
-//   if (targetedView) {
-//     targetedView.classList.remove('hidden');
-//     targetedView.style.display = screenId === 'home-screen' ? 'flex' : '';
-//   }
-
-//   const logErr = document.getElementById('login-error');
-//   const signErr = document.getElementById('signup-error');
-//   if (logErr) logErr.classList.add('hidden');
-//   if (signErr) signErr.classList.add('hidden');
-// }
-
-// function normalizeRole(role) {
-//   if (!role) return 'citizen';
-//   const normalized = String(role).trim().toLowerCase();
-//   if (normalized === 'technician' || normalized === 'worker' || normalized === 'contractor') return 'worker';
-//   if (normalized === 'admin' || normalized === 'administrator') return 'admin';
-//   return 'citizen';
-// }
-
-// function handleAuthSuccess(user, role) {
-//   const normalizedRole = normalizeRole(role);
-//   APP.currentUser = {
-//     id: user.user_id || null,
-//     name: `${user.name || ''} ${user.surname || ''}`.trim() || user.email || 'User',
-//     initials: ((user.name?.[0] || user.email?.[0] || 'U') + (user.surname?.[0] || '')).toUpperCase(),
-//     email: user.email || '',
-//     technician_status: user.technician_status ?? (normalizedRole === 'worker' ? 'Active' : null) 
-//   };
-//   APP.currentRole = normalizedRole;
-//   loadApp();
-// }
-
-// // ── TOAST MESSAGES ───────────────────────────────────────────
-// function showToast(msg, type='info') {
-//   const c = document.getElementById('toast-container');
-//   if (!c) return;
-//   const t = document.createElement('div');
-//   t.className = `toast ${type}`;
-//   t.textContent = msg;
-//   c.appendChild(t);
-//   setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(100%)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(),300); }, 3200);
-// }
-
-// // ── STATUS BADGE HTML ──────────────────────────────────────────
-// function statusBadge(s) {
-//   const map = { pending:'badge-pending', assigned:'badge-assigned', inprogress:'badge-inprogress', completed:'badge-completed' };
-//   const label = { pending:'Pending', assigned:'Assigned', inprogress:'In Progress', completed:'Completed' };
-//   return `<span class="badge ${map[s]||''}">${label[s]||s}</span>`;
-// }
-
-// // ── PRIORITY HTML ──────────────────────────────────────────────
-// function priorityHtml(p) {
-//   return `<span class="priority ${p}"><span class="priority-dot"></span>${p.charAt(0).toUpperCase()+p.slice(1)}</span>`;
-// }
-
-// // ── CATEGORY ICON ──────────────────────────────────────────────
-// function catIcon(c) {
-//   return { Water:'💧', Road:'🚧', Electric:'⚡', Other:'📋' }[c] || '📋';
-// }
-
-// // ── INNER APP ROUTER ──────────────────────────────────────────
-// async function navigate(page) {
-//   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-//   const link = document.querySelector(`.nav-link[data-page="${page}"]`);
-//   if (link) link.classList.add('active');
-
-//   APP.currentPage = page;
-//   const main = document.getElementById('main-content');
-//   if (!main) return;
-
-// if (page === 'dashboard-worker') {
-//   document.getElementById('main-content').innerHTML = renderWorkerDashboard();
-//   return; 
-// }
-
-//   const renders = {
-//     'dashboard-citizen':  renderCitizenDashboard,
-//     'create-ticket':      renderCreateTicket,
-//     'my-tickets':         renderMyTickets,
-//     'dashboard-worker':   renderWorkerDashboard,
-//     'assigned-jobs':      renderAssignedJobs,
-//     'dashboard-admin':    renderAdminDashboard,
-//     'all-tickets':        renderAllTickets,
-//     'assign-worker':      renderAssignWorker,
-//     'manage-users':       renderManageUsers,
-//     'reports':            renderReports,
-//     'notifications':      renderNotifications,
-//     'profile':            renderProfile,
-//   };
-
-//   if (renders[page]) {
-//     const result = await renders[page]();
-//     main.innerHTML = `<div class="page">${result}</div>`;
-//     bindPageEvents(page);
-//   }
-// }
-
-// // ── LANDING HOME EVENT HANDLERS ───────────────────────────────
-// async function handleHomeTrackTicket() {
-//   const ticketInput = document.getElementById('home-track-id');
-//   const idValue = ticketInput ? ticketInput.value.trim().toUpperCase() : '';
-  
-//   if (!idValue) {
-//     showToast('Please type a valid Ticket ID first.', 'error');
-//     return;
-//   }
-  
-//   const foundTicket = APP.tickets.find(t => t.id === idValue);
-//   if (foundTicket) {
-//     showTicketDetail(foundTicket.id);
-//     return;
-//   }
-
-//   try {
-//     const res = await fetch(`${API_URL}/tickets/id/${encodeURIComponent(idValue)}`);
-//     const data = await res.json();
-
-//     if (data.success && data.ticket) {
-//       const ticket = formatTicketRow(data.ticket);
-//       APP.tickets.unshift(ticket);
-//       showTicketDetail(ticket.id);
-//     } else {
-//       showToast(`No logged infrastructure ticket was found matching code "${idValue}".`, 'error');
-//     }
-//   } catch (err) {
-//     console.error('Ticket lookup error', err);
-//     showToast('Unable to reach the ticket service. Please try again later.', 'error');
-//   }
-// }
-
-// function handleGuestLogTicket() {
-//   showToast('Please sign up or login with your database credentials to submit maintenance reports.', 'info');
-//   setTimeout(() => {
-//     showScreen('signup-screen');
-//   }, 1200);
-// }
-
-// // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
-// function initGlobalAuthHandlers() {
-//   const API_URL = "http://105.228.61.32:3000";
-
-//   //105.228.61.32
-
-//   // =========================
-//   // LOGIN HANDLER
-//   // =========================
-//   const logForm = document.getElementById('login-form');
-//   if (logForm) {
-//     logForm.addEventListener('submit', async e => {
-//       e.preventDefault();
-
-//       const email = document.getElementById('login-email').value.trim();
-//       const password = document.getElementById('login-password').value.trim();
-//       const errEl = document.getElementById('login-error');
-
-//       errEl.classList.add('hidden');
-
-//       if (!email || !password) {
-//         errEl.textContent = 'Please fill in all fields.';
-//         errEl.classList.remove('hidden');
-//         return;
-//       }
-
-//       try {
-//         const res = await fetch(`${API_URL}/login`, {
-//           method: "POST",
-//           headers: { "Content-Type": "application/json" },
-//           body: JSON.stringify({ email, password })
-//         });
-
-//         const data = await res.json();
-
-//         if (!data.success) {
-//           errEl.textContent = "Invalid email or password.";
-//           errEl.classList.remove('hidden');
-//           return;
-//         }
-
-//         const user = data.user;
-
-//         handleAuthSuccess(user, user.role);
-//         showToast(`Welcome back ${user.name || user.email}!`, 'success');
-
-//       } catch (err) {
-//         errEl.textContent = "Server error. Please try again.";
-//         errEl.classList.remove('hidden');
-//       }
-//     });
-//   }
-
-//   // =========================
-//   // SIGNUP HANDLER
-//   // =========================
-//   const signForm = document.getElementById('signup-form');
-//   if (signForm) {
-//     signForm.addEventListener('submit', async e => {
-//       e.preventDefault();
-
-//       const role = document.getElementById('signup-role').value;
-//       const name = document.getElementById('signup-name').value.trim();
-//       const surname = document.getElementById('signup-surname').value.trim();
-//       const email = document.getElementById('signup-email').value.trim();
-//       const cellphone = document.getElementById('signup-cellphone').value.trim();
-//       const password = document.getElementById('signup-password').value.trim();
-//       const errEl = document.getElementById('signup-error');
-
-//       errEl.classList.add('hidden');
-
-//       if (!role || !name || !surname || !email || !cellphone || !password) {
-//         errEl.textContent = 'All fields are required.';
-//         errEl.classList.remove('hidden');
-//         return;
-//       }
-
-//       try {
-//         const res = await fetch(`${API_URL}/signup`, {
-//           method: "POST",
-//           headers: { "Content-Type": "application/json" },
-//           body: JSON.stringify({
-//             role,
-//             name,
-//             surname,
-//             email,
-//             cellphone,
-//             password
-//           })
-//         });
-
-//         const data = await res.json();
-
-//         if (!data.success) {
-//           errEl.textContent = data.message || "Signup failed.";
-//           errEl.classList.remove('hidden');
-//           return;
-//         }
-
-//         showToast("Account created successfully!", "success");
-
-//         handleAuthSuccess({ name, surname, email }, role);
-
-//         setTimeout(() => {
-//           signForm.reset();
-//         }, 800);
-
-//       } catch (err) {
-//         errEl.textContent = "Server error. Please try again.";
-//         errEl.classList.remove('hidden');
-//       }
-//     });
-//   }
-// }
-// // ── LOAD APP SHELL ─────────────────────────────────────────────
-// async function loadApp() {
-//   document.getElementById('login-screen').classList.add('hidden');
-//   document.getElementById('signup-screen').classList.add('hidden');
-//   document.getElementById('home-screen').classList.add('hidden');
-//   document.getElementById('app-shell').classList.remove('hidden');
-
-//   document.getElementById('user-name').textContent = APP.currentUser.name;
-//   document.getElementById('user-initials').textContent = APP.currentUser.initials;
-
-//   await loadLocations();
-//   await loadUserTickets();
-//   buildSidebar();
-
-//   const defaultPage = {
-//     citizen: 'dashboard-citizen',
-//     worker:  'dashboard-worker',
-//     admin:   'dashboard-admin',
-//   }[APP.currentRole] || 'dashboard-citizen';
-//   navigate(defaultPage);
-// }
-
-// // ── SIDEBAR BUILDER ────────────────────────────────────────────
-// function buildSidebar() {
-//   const sidebar = document.getElementById('sidebar');
-//   const ticketCount = APP.tickets.length || 0;
-//   const navs = {
-//     citizen: `
-//       <div class="sidebar-section-label">Main</div>
-//       <a class="nav-link" data-page="dashboard-citizen"><span class="icon">🏠</span>Dashboard</a>
-//       <a class="nav-link" data-page="my-tickets"><span class="icon">🎫</span>My Tickets <span class="nav-badge">${ticketCount}</span></a>
-//       <a class="nav-link" data-page="create-ticket"><span class="icon">➕</span>New Ticket</a>
-//       <div class="sidebar-section-label">Account</div>
-//       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
-//       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
-//     worker: `
-//       <div class="sidebar-section-label">Main</div>
-//       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
-//       <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">0</span></a>
-//       <div class="sidebar-section-label">Account</div>
-//       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
-//       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
-//     admin: `
-//       <div class="sidebar-section-label">Management</div>
-//       <a class="nav-link" data-page="dashboard-admin"><span class="icon">🏠</span>Dashboard</a>
-//       <a class="nav-link" data-page="all-tickets"><span class="icon">📋</span>All Tickets</a>
-//       <a class="nav-link" data-page="assign-worker"><span class="icon">👷</span>Assign Workers</a>
-//       <a class="nav-link" data-page="manage-users"><span class="icon">👥</span>Manage Users</a>
-//       <a class="nav-link" data-page="reports"><span class="icon">📊</span>Reports</a>
-//       <div class="sidebar-section-label">Account</div>
-//       <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
-//       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
-//   };
-//   sidebar.innerHTML = navs[APP.currentRole];
-//   sidebar.querySelectorAll('.nav-link').forEach(l => {
-//     l.addEventListener('click', () => navigate(l.dataset.page));
-//   });
-// }
-
-// function refreshMyTicketsBadge() {
-//   const badge = document.querySelector('.nav-link[data-page="my-tickets"] .nav-badge');
-//   if (badge) {
-//     badge.textContent = String(APP.tickets.length || 0);
-//   }
-// }
-
-// function refreshWorkerJobsBadge() {
-//   const badge = document.getElementById('worker-jobs-badge');
-//   if (badge && APP.currentUser?.user_id) {
-//     const activeJobs = APP.tickets.filter(t => 
-//       String(t.technician_id) === String(APP.currentUser.user_id) && 
-//       t.status !== 'completed'
-//     ).length;
-    
-//     badge.textContent = String(activeJobs);
-//   }
-// }
-
-// // ── PAGE RENDERS ───────────────────────────────────────────────
-// function renderCitizenDashboard() {
-//   const stats = APP.tickets;
-//   const myTickets = stats.slice(0,4);
-//   const userIdDisplay = APP.currentUser.user_id ? `<span class="user-id-badge">#${APP.currentUser.user_id}</span>` : '';
-//   return `
-//   <div class="page-header">
-//     <div>
-//       <div class="page-title">Citizen Dashboard</div>
-//       <div class="page-subtitle">Welcome back, ${APP.currentUser.name} ${userIdDisplay} — track your submissions here.</div>
-//     </div>
-//     <button class="btn btn-primary" onclick="navigate('create-ticket')">➕ New Ticket</button>
-//   </div>
-//   <div class="stats-grid">
-//     <div class="stat-card"><div class="stat-number">${stats.length}</div><div class="stat-label">Total Submitted</div></div>
-//     <div class="stat-card orange"><div class="stat-number">${stats.filter(t=>t.status==='pending').length}</div><div class="stat-label">Pending</div></div>
-//     <div class="stat-card blue"><div class="stat-number">${stats.filter(t=>t.status==='inprogress').length}</div><div class="stat-label">In Progress</div></div>
-//     <div class="stat-card green"><div class="stat-number">${stats.filter(t=>t.status==='completed').length}</div><div class="stat-label">Completed</div></div>
-//   </div>
-//   <div class="card">
-//     <div class="card-header"><span class="card-title">Recent Tickets</span><a class="btn btn-sm btn-outline" onclick="navigate('my-tickets')">View All</a></div>
-//     <div class="card-body">
-//       <div class="ticket-list">
-//         ${myTickets.map(t=>`
-//         <div class="ticket-item" onclick="showTicketDetail('${t.id}')">
-//           <div class="ticket-icon ${t.category.toLowerCase()}">${catIcon(t.category)}</div>
-//           <div class="ticket-info">
-//             <div class="ticket-title">${t.title}</div>
-//             <div class="ticket-meta">📍 ${t.location} &nbsp;|&nbsp; ${t.date}</div>
-//           </div>
-//           <div class="ticket-right">
-//             ${statusBadge(t.status)}
-//             <div class="text-muted" style="margin-top:4px">${t.id}</div>
-//           </div>
-//         </div>`).join('')}
-//       </div>
-//     </div>
-//   </div>`;
-// }
-
-// function renderCreateTicket() {
-//   const locOptions = APP.locations.map(loc => {
-//     const displayText = `${loc.street}, ${loc.suburb}`;
-//     return `<option value="${displayText}">${displayText}</option>`;
-//   }).join('');
-  
-//   return `
-//   <div class="page-header">
-//     <div>
-//       <div class="page-title">Create Ticket</div>
-//       <div class="page-subtitle">Report a public infrastructure issue in Johannesburg.</div>
-//     </div>
-//   </div>
-//   <div class="card">
-//     <div class="card-header"><span class="card-title">Ticket Information</span></div>
-//     <div class="card-body">
-//       <form id="create-ticket-form">
-//         <div class="form-row">
-//           <div class="form-group">
-//             <label class="form-label">Title / Subject *</label>
-//             <input class="form-control" id="t-title" type="text" placeholder="e.g. Burst water pipe on Vilakazi St" required>
-//           </div>
-//           <div class="form-group">
-//             <label class="form-label">Category *</label>
-//             <select class="form-control" id="t-cat">
-//               <option value="">— Select Category —</option>
-//               <option>Water</option>
-//               <option>Road</option>
-//               <option>Electric</option>
-//               <option>Other</option>
-//             </select>
-//           </div>
-//         </div>
-//         <div class="form-group">
-//           <label class="form-label">Description *</label>
-//           <textarea class="form-control" id="t-desc" placeholder="Describe the issue in detail..." rows="4"></textarea>
-//         </div>
-//         <div class="form-row">
-//           <div class="form-group">
-//             <label class="form-label">Location / Address *</label>
-//             <select class="form-control" id="t-loc" required>
-//               <option value="">— Select Location —</option>
-//               ${locOptions}
-//             </select>
-//           </div>
-//           <div class="form-group">
-//             <label class="form-label">Priority *</label>
-//             <select class="form-control" id="t-priority" required>
-//               <option value="">— Select Priority —</option>
-//               <option>Low</option>
-//               <option selected>Medium</option>
-//               <option>High</option>
-//             </select>
-//           </div>
-//         </div>
-//         <div style="display:flex;gap:1rem;margin-top:0.5rem">
-//           <button type="submit" class="btn btn-primary btn-lg">Submit Ticket 🚀</button>
-//           <button type="button" class="btn btn-outline" onclick="navigate('dashboard-citizen')">Cancel</button>
-//         </div>
-//       </form>
-//     </div>
-//   </div>`;
-// }
-
-// function renderMyTickets() {
-//   return `
-//   <div class="page-header">
-//     <div>
-//       <div class="page-title">My Tickets</div>
-//       <div class="page-subtitle">Track the status of all your submitted maintenance requests.</div>
-//     </div>
-//   </div>
-//   <div class="card">
-//     <div class="card-body" style="padding:0">
-//       <div class="table-wrap">
-//         <table id="tickets-table">
-//           <thead><tr><th>Ticket ID</th><th>Title</th><th>Category</th><th>Location</th><th>Date</th><th>Status</th><th>Priority</th><th></th></tr></thead>
-//           <tbody>
-//             ${APP.tickets.map(t=>`<tr>
-//               <td style="font-weight:700;color:var(--navy)">${t.id}</td>
-//               <td>${t.title}</td>
-//               <td>${catIcon(t.category)} ${t.category}</td>
-//               <td style="font-size:0.8rem">${t.location}</td>
-//               <td style="font-size:0.8rem">${t.date}</td>
-//               <td>${statusBadge(t.status)}</td>
-//               <td>${priorityHtml(t.priority)}</td>
-//               <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
-//             </tr>`).join('')}
-//           </tbody>
-//         </table>
-//       </div>
-//     </div>
-//   </div>`;
-// }
-
-// function renderWorkerDashboard() {
-// const assigned = APP.tickets.filter(t => t.technician_id == APP.currentUser.user_id);  
-// const activeStatus = APP.currentUser.technician_status ?? 'Inactive';
-//   const totalAssigned = assigned.length;
-//   const pendingCount  = assigned.filter(t => t.status === 'pending' || t.status === 'assigned').length;
-//   const progressCount = assigned.filter(t => t.status === 'inprogress').length;
-//   const completedCount = assigned.filter(t => t.status === 'completed').length;
-//   return `
-//   <div class="page-header">
-//     <div>
-//       <div class="page-title">Worker Dashboard</div>
-//       <div class="page-subtitle">Hello, ${APP.currentUser.name}.  Overview.</div>
-//     </div>
-//   </div>
-
-//   <div class="card" style="margin-bottom: 1.5rem;">
-//     <div class="card-header">
-//       <span class="card-title">⚙️ Duty Operational Status</span>
-//     </div>
-//     <div class="card-body">
-//       <div class="form-group" style="max-width: 400px; margin: 0;">
-//         <label class="form-label">Set Your Current Field State:</label>
-//         <select id="tech-availability-select" class="form-control" onchange="handleUpdateAvailability(this.value)">
-//           <option value="Active" ${activeStatus === 'Active' ? 'selected' : ''}>Active / Available on Field</option>
-//           <option value="Inactive" ${activeStatus === 'Inactive' ? 'selected' : ''}>Inactive / Off-Duty</option>
-//           <option value="On Leave" ${activeStatus === 'On Leave' ? 'selected' : ''}>On Leave</option>
-//         </select>
-//       </div>
-//     </div>
-//   </div>
-
-//   <div class="stats-grid" style="margin-bottom: 1.5rem;">
-//     <div class="stat-card">
-//       <div class="stat-number">${totalAssigned}</div>
-//       <div class="stat-label">Total Assigned</div>
-//     </div>
-//     <div class="stat-card orange">
-//       <div class="stat-number">${pendingCount}</div>
-//       <div class="stat-label">Pending</div>
-//     </div>
-//     <div class="stat-card blue">
-//       <div class="stat-number">${progressCount}</div>
-//       <div class="stat-label">In Progress</div>
-//     </div>
-//     <div class="stat-card green">
-//       <div class="stat-number">${completedCount}</div>
-//       <div class="stat-label">Completed</div>
-//     </div>
-//   </div>
-
-//   <div class="card">
-//     <div class="card-body">
-//       <div class="ticket-list">
-//         ${assigned.length === 0 ? `
-//           <div style="text-align: center; color: var(--muted); padding: 1.5rem;">
-//             ⚙️ No work orders currently assigned to your account.
-//           </div>
-//         ` : assigned.map(t => `
-//         <div class="ticket-item" onclick="navigate('assigned-jobs')" style="cursor: pointer;">
-//           <div class="ticket-icon ${t.category ? t.category.toLowerCase() : 'other'}">${catIcon(t.category)}</div>
-//           <div class="ticket-info">
-//             <div class="ticket-title">${t.title || 'Untitled Job'}</div>
-//             <div class="ticket-meta">📍 ${t.location || 'Johannesburg'}</div>
-//           </div>
-//           <div class="ticket-right">${statusBadge(t.status)}</div>
-//         </div>`).join('')}
-//       </div>
-//     </div>
-//   </div>`;
-// }
-
-// async function handleUpdateAvailability(newStatus) {
-//   try {
-//     const res = await fetch(`${API_URL}/user/update-status`, {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({ userId: APP.currentUser.id, status: newStatus })
-//     });
-
-//     const data = await res.json();
-
-//     if (data.success) {
-//       APP.currentUser.technician_status = newStatus;  // ← keeps UI in sync
-//       showToast("Status updated successfully", "success");
-//     } else {
-//       showToast("Failed to update status", "error");
-//     }
-//   } catch (err) {
-//     showToast("Server error", "error");
-//   }
-// }
-
-// function renderAssignedJobs() {
-//   const myJobs = APP.tickets.filter(t => t.technician_id == APP.currentUser.user_id);  return `
-//   <div class="page-header"><div><div class="page-title">My Assigned Tasks</div></div></div>
-//   <div class="card">
-//     <div class="card-body" style="padding:0">
-//       <div class="table-wrap">
-//         <table>
-//           <thead><tr><th>Ticket ID</th><th>Title</th><th>Location</th><th>Priority</th><th>Status</th><th>Actions</th></tr></thead>
-//           <tbody>
-//             ${myJobs.map(t=>`
-//               <tr>
-//                 <td style="font-weight:700;color:var(--navy)">${t.id}</td>
-//                 <td>${t.title}</td>
-//                 <td>${t.location}</td>
-//                 <td>${priorityHtml(t.priority)}</td>
-//                 <td>${statusBadge(t.status)}</td>
-//                 <td>
-//                   <select class="form-control" style="width:130px;" onchange="updateJobStatus('${t.id}', this.value)">
-//                     <option value="assigned" ${t.status==='assigned'?'selected':''}>Assigned</option>
-//                     <option value="inprogress" ${t.status==='inprogress'?'selected':''}>In Progress</option>
-//                     <option value="completed" ${t.status==='completed'?'selected':''}>Completed</option>
-//                   </select>
-//                 </td>
-//               </tr>
-//             `).join('')}
-//           </tbody>
-//         </table>
-//       </div>
-//     </div>
-//   </div>`;
-// }
-
-// function updateJobStatus(id, newStatus) {
-//   const t = APP.tickets.find(tick => tick.id === id);
-//   if(t) {
-//     t.status = newStatus;
-//     showToast(`Task ${id} moved to status: ${newStatus}`, 'success');
-    
-//     refreshWorkerJobsBadge(); 
-//     refreshMyTicketsBadge();
-    
-//     if (APP.currentPage === 'assigned-jobs') {
-//       const main = document.getElementById('main-content');
-//       if (main) main.innerHTML = `<div class="page">${renderAssignedJobs()}</div>`;
-//     }
-//   }
-// }
-
-// function renderAdminDashboard() {
-//   return `<div class="page-header"><div><div class="page-title">Admin Command Console</div></div></div>`;
-// }
-
-// async function renderAllTickets() {
-//   try {
-//     const res = await fetch("http://105.228.61.32:3000/tickets");
-//     const data = await res.json();
-
-//     if (!data || !Array.isArray(data)) {
-//       return `<div class="card"><div class="card-body">Failed to load tickets.</div></div>`;
-//     }
-
-//     return `
-//     <div class="page-header">
-//       <div>
-//         <div class="page-title">All Tickets</div>
-//         <div class="page-subtitle">Every submitted infrastructure ticket in the system (${data.length} total)</div>
-//       </div>
-//     </div>
-//     <div class="card">
-//       <div class="card-body" style="padding:0">
-//         <div class="table-wrap">
-//           <table>
-//             <thead>
-//               <tr>
-//                 <th>Ticket ID</th>
-//                 <th>Title</th>
-//                 <th>Description</th>
-//                 <th>Priority</th>
-//                 <th>Status</th>
-//                 <th>Asset ID</th>
-//                 <th>User ID</th>
-//                 <th>Date Created</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               ${data.length === 0 ? `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text-muted)">No tickets found.</td></tr>` : 
-//                 data.map(t => `
-//                 <tr>
-//                   <td style="font-weight:700;color:var(--navy)">${t.id}</td>
-//                   <td>${t.title || '-'}</td>
-//                   <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description || '-'}</td>
-//                   <td>${priorityHtml(t.priority || 'medium')}</td>
-//                   <td>${statusBadge(t.status_id == 1 ? 'pending' : t.status_id == 2 ? 'assigned' : t.status_id == 3 ? 'inprogress' : 'completed')}</td>
-//                   <td>${t.asset_id || '-'}</td>
-//                   <td>${t.user_id || '-'}</td>
-//                   <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
-//                 </tr>`).join('')}
-//             </tbody>
-//           </table>
-//         </div>
-//       </div>
-//     </div>`;
-
-//   } catch (err) {
-//     console.error('renderAllTickets error:', err);
-//     return `<div class="card"><div class="card-body">Server error: ${err.message}</div></div>`;
-//   }
-// }
-// function renderAssignWorker() { return `<div class="card"><div class="card-body"><h3>Assign Contractor Task Matrix</h3></div></div>`; }
-// async function renderManageUsers() {
-//   try {
-//     const res = await fetch("http://105.228.61.32:3000/users");
-//     const data = await res.json();
-
-//     if (!data.success) {
-//       return `<div class="card"><div class="card-body">Failed to load users.</div></div>`;
-//     }
-
-//     return `
-//     <div class="page-header">
-//       <div>
-//         <div class="page-title">Manage Users</div>
-//         <div class="page-subtitle">All registered system users (${data.users.length} total)</div>
-//       </div>
-//     </div>
-//     <div class="card">
-//       <div class="card-body" style="padding:0">
-//         <div class="table-wrap">
-//           <table>
-//             <thead>
-//               <tr>
-//                 <th>User ID</th>
-//                 <th>Name</th>
-//                 <th>Surname</th>
-//                 <th>Email</th>
-//                 <th>Cellphone</th>
-//                 <th>Password</th>
-//                 <th>Role</th>
-//               </tr>
-//             </thead>
-//             <tbody>
-//               ${data.users.map(u => `
-//                 <tr>
-//                   <td style="font-weight:700;color:var(--navy)">${u.user_id}</td>
-//                   <td>${u.name}</td>
-//                   <td>${u.surname}</td>
-//                   <td>${u.email}</td>
-//                   <td>${u.cellphone || '-'}</td>
-//                   <td>${u.password}</td>
-//                   <td>${u.role}</td>
-//                 </tr>
-//               `).join('')}
-//             </tbody>
-//           </table>
-//         </div>
-//       </div>
-//     </div>`;
-
-//   } catch (err) {
-//     return `<div class="card"><div class="card-body">Server error loading users.</div></div>`;
-//   }
-// }
-// function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
-// function renderNotifications() {
-//   const isWorker = APP.currentRole === 'worker';
-  
-//   // Data relevant to the specific user
-//   const myRelevantData = APP.tickets.filter(t => 
-//     isWorker ? String(t.technician_id) === String(APP.currentUser.user_id) : t.user_id == APP.currentUser.user_id
-//   );
-
-//   // ── WORKER NOTIFICATION LOGIC ─────────────────────────────
-//   if (isWorker) {
-//     const emergencyAssignments = myRelevantData.filter(t => t.priority === 'high' && t.status !== 'completed');
-//     const confirmedDoneJobs = myRelevantData.filter(t => t.status === 'completed');
-
-//     return `
-//       <div class="page-header">
-//         <div><div class="page-title">Notifications Hub</div></div>
-//       </div>
-//       ${emergencyAssignments.length > 0 ? `
-//         <div class="card" style="margin-bottom: 2rem; border-left: 8px solid #E53E3E;">
-//           <div class="card-body">
-//             <strong>🚨 EMERGENCY DISPATCH:</strong> You have ${emergencyAssignments.length} high-priority fault(s).
-//             <button class="btn btn-danger" onclick="navigate('assigned-jobs')">Open Work Orders</button>
-//           </div>
-//         </div>` : '<div class="card"><div class="card-body">✅ No critical emergencies.</div></div>'}
-      
-//       <div class="card">
-//         <div class="card-header">🔄 Administrative Job Closures</div>
-//         <div class="card-body">
-//           ${confirmedDoneJobs.map(job => `
-//             <div style="padding: 1rem; border-bottom: 1px solid #eee;">
-//               ✅ Administrator confirmed and closed Ticket <strong>${job.id}</strong>: "${job.title}"
-//             </div>`).join('') || 'No confirmed resolved jobs.'}
-//         </div>
-//       </div>`;
-//   }
-
-//   // ── CITIZEN NOTIFICATION LOGIC ────────────────────────────
-//   const completedComplaints = myRelevantData.filter(t => t.status === 'completed');
-
-//   return `
-//     <div class="page-header">
-//       <div class="page-title">My Notifications</div>
-//     </div>
-//     <div class="card">
-//       <div class="card-body">
-//         ${completedComplaints.length === 0 ? `
-//           <div style="text-align: center; padding: 2rem; color: #718096;">
-//             No new updates on your reports yet.
-//           </div>
-//         ` : completedComplaints.map(t => `
-//           <div style="padding: 1.5rem; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 1rem;">
-//             <div style="font-size: 1.5rem;">✅</div>
-//             <div>
-//               <div style="font-weight: 700; font-size: 1.1rem;">Your work is done</div>
-//               <div style="color: #4A5568;">
-//                 Your report for <strong>${t.title}</strong> (ID: ${t.id}) has been successfully resolved.
-//               </div>
-//             </div>
-//           </div>
-//         `).join('')}
-//       </div>
-//     </div>`;
-// }
-
-// function renderProfile() {
-//   const user = APP.currentUser;
-//   if (!user) {
-//     return `<div class="card"><div class="card-body"><p>No active session found.</p></div></div>`;
-//   }
-
-//   const isWorker = APP.currentRole === 'worker';
-  
-//   // Logic for the color-coded status badge (Worker Only)
-//   let statusSection = '';
-//   if (isWorker) {
-//     const currentStatus = user.technician_status || 'Active';
-//     let statusBadgeColor = '#38A169'; // Green (Active)
-//     if (currentStatus === 'Inactive') statusBadgeColor = '#718096'; // Grey
-//     if (currentStatus === 'On Leave') statusBadgeColor = '#DD6B20'; // Orange
-    
-//     statusSection = `
-//       <div style="display: inline-block; margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: ${statusBadgeColor}; color: white; border-radius: 20px; font-size: 0.75rem; font-weight: bold; text-transform: uppercase;">
-//         ● ${currentStatus}
-//       </div>`;
-//   }
-
-//   // Professional details
-//   let professionalDetails = '';
-//   if (isWorker) {
-//     professionalDetails = `
-//       <div class="detail-row"><label>Employee ID:</label> <span>#${user.id || 'EMP-000'}</span></div>
-//       <div class="detail-row"><label>Operational Status:</label> <span>${user.technician_status || 'Active'}</span></div>
-//     `;
-//   } else {
-//     professionalDetails = `
-//       <div class="detail-row"><label>Account Type:</label> <span>Registered Citizen</span></div>
-//       <div class="detail-row"><label>Region:</label> <span>City of Johannesburg</span></div>
-//     `;
-//   }
-
-//   return `
-//   <div class="page-header">
-//     <div>
-//       <div class="page-title">User Profile</div>
-//       <div class="page-subtitle">Personal account information and system credentials.</div>
-//     </div>
-//   </div>
-
-//   <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 1.5rem; align-items: start;">
-//     <div class="card" style="text-align: center; padding: 2rem;">
-//       <div style="width: 90px; height: 90px; background: var(--navy); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 0 auto 0.5rem auto;">
-//         ${user.initials}
-//       </div>
-//       <h3 style="margin: 0;">${user.name}</h3>
-//       <p style="color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem;">${user.email}</p>
-//       ${statusSection}
-//     </div>
-
-//     <div class="card">
-//       <div class="card-header"><span class="card-title">Credentials</span></div>
-//       <div class="card-body" style="display: flex; flex-direction: column; gap: 1rem;">
-//         ${professionalDetails}
-//       </div>
-//     </div>
-//   </div>
-//   `;
-// }
-
-// // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
-// function showTicketDetail(ticketId) {
-//   const ticket = APP.tickets.find(t => t.id === ticketId);
-//   if (!ticket) return;
-
-//   const overlayHtml = `
-//     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
-//       <div class="modal" onclick="event.stopPropagation()">
-//         <div class="modal-header">
-//           <div class="modal-title">Fault Summary: ${ticket.id}</div>
-//           <button class="modal-close" onclick="closeTicketModal()">&times;</button>
-//         </div>
-//         <div class="modal-body">
-//           <div style="margin-bottom:1rem; display:flex; justify-content:space-between; align-items:center;">
-//              <h4>${catIcon(ticket.category)} ${ticket.title}</h4>
-//              ${statusBadge(ticket.status)}
-//           </div>
-//           <p style="margin-bottom:0.75rem;"><strong>Region / Location:</strong> ${ticket.location}</p>
-//           <p style="margin-bottom:0.75rem;"><strong>Reported Date:</strong> ${ticket.date}</p>
-//           <div style="background:#F4F6F9; padding:1rem; border-radius:4px; margin-top:1rem;">
-//              <strong>Description:</strong><br>
-//              <span style="font-size:0.9rem;">${ticket.desc || 'No details provided.'}</span>
-//           </div>
-//         </div>
-//         <div class="modal-footer">
-//           <button class="btn btn-outline" onclick="closeTicketModal()">Close Window</button>
-//         </div>
-//       </div>
-//     </div>
-//   `;
-//   document.getElementById('ticket-modal-container').innerHTML = overlayHtml;
-// }
-
-// function closeTicketModal() {
-//   const modal = document.getElementById('ticket-modal');
-//   if (modal) modal.remove();
-// }
-
-// function bindPageEvents(page) {
-//   if (page === 'create-ticket') {
-//     const form = document.getElementById('create-ticket-form');
-//     if (form) form.addEventListener('submit', e => { e.preventDefault(); submitTicket(); });
-//   }
-// }
-
-// function formatTicketRow(row) {
-  
-//   const ticketId = row.ticket_id || row.id || '';
-//   return {
-//     id: ticketId && String(ticketId).startsWith('TK-') ? String(ticketId) : `TK-${ticketId}`,
-//     title: row.title || '',
-//     category: row.category || row.asset_type || 'Other',
-//     location: row.location || `${row.street || ''}${row.suburb ? ', ' + row.suburb : ''}`.trim(),
-//     status: row.status || 'pending',
-//     priority: (String(row.priority || 'medium')).toLowerCase(),
-//     date: row.date ? String(row.date).split('T')[0] : '',
-//     worker: row.worker || null,
-//     technician_id: row.technician_id || null,
-//     desc: row.description || row.desc || ''
-//   };
-// }
-
-// async function loadLocations() {
-//   if (APP.locations.length > 0) return;
-  
-//   try {
-//     const res = await fetch(`${API_URL}/locations`);
-//     const data = await res.json();
-    
-//     if (data.success) {
-//       APP.locations = data.locations;
-//     }
-//   } catch (err) {
-//     console.error('Error loading locations:', err);
-//   }
-// }
-
-// async function loadUserTickets() {
-//   if (!APP.currentUser?.id) {
-//     APP.tickets = [];
-//     refreshMyTicketsBadge();
-//     return;
-//   }
-
-//   try {
-//     let endpoint = `${API_URL}/tickets/user/${encodeURIComponent(APP.currentUser.user_id)}`;
-    
-//     if (APP.currentRole === 'worker') {
-//       endpoint = `${API_URL}/tickets/technician/${encodeURIComponent(APP.currentUser.user_id)}`;
-//     }
-
-//     const res = await fetch(endpoint);
-//     const data = await res.json();
-//     if (data.success && Array.isArray(data.tickets)) {
-//       APP.tickets = data.tickets.map(formatTicketRow);
-//     } else {
-//       APP.tickets = [];
-//     }
-//   } catch (err) {
-//     console.error('Error loading user tickets:', err);
-//     APP.tickets = [];
-//   }
-
-//   refreshMyTicketsBadge();
-//   refreshWorkerJobsBadge();
-// }
-
-// async function submitTicket() {
-//   const title = document.getElementById('t-title')?.value.trim();
-//   const cat   = document.getElementById('t-cat')?.value;
-//   const desc  = document.getElementById('t-desc')?.value.trim();
-//   const loc   = document.getElementById('t-loc')?.value.trim();
-//   const pri   = (document.getElementById('t-priority')?.value || 'Medium');
-//   if (!title || !cat || !desc || !loc || !pri) { showToast('Please fill in required fields.','error'); return; }
-
-//   const API_URL = "http://105.228.61.32:3000";
-
-//   try {
-//     const res = await fetch(`${API_URL}/tickets`, {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify({ title, category: cat, description: desc, location: loc, priority: pri, user_id: APP.currentUser?.id })
-//     });
-
-//     const data = await res.json();
-//     if (!data.success) {
-//       showToast(data.message || 'Failed to submit ticket.','error');
-//       return;
-//     }
-
-//     showToast(`🎉 Ticket submitted!`, 'success');
-//     await loadUserTickets();
-//     refreshMyTicketsBadge();
-//     setTimeout(() => navigate('my-tickets'), 800);
-//   } catch (err) {
-//     console.error('Submit ticket error', err);
-//     showToast('Server error while submitting ticket.','error');
-//   }
-// }
-
-// // ── LOGOUT ────────────────────────────────────────────────────
-// function logout() {
-//   APP.currentUser = null; APP.currentRole = null;
-//   showScreen('home-screen');
-//   showToast('You have been logged out.', 'info');
-// }
-
-// // Updates the technician's availability status locally and syncs it with the server backend
-// async function handleUpdateAvailability(newStatus) {
-//   const userId = APP.currentUser.id;
-
-//   console.log(APP.currentUser);
-//   console.log("USER ID:", userId);
-//   console.log("STATUS:", newStatus); 
-
-//   try {
-//     const response = await fetch('http://105.228.61.32:3000/user/update-status', {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify({ 
-//         userId: userId, 
-//         status: newStatus 
-//       })
-//     });
-
-//     const data = await response.json();
-
-//     if (data.success) {
-    
-//       if (APP.currentUser) {
-//         APP.currentUser.technician_status = newStatus;
-//       }
-
-//       if (typeof showToast === 'function') {
-//         showToast(`Duty status updated to: ${newStatus}`, 'success');
-//       } else {
-//         alert(`Duty status updated to: ${newStatus}`);
-//       }
-      
-//       if (typeof renderProfile === 'function') renderProfile();
-//     } else {
-//       console.error('Update failed:', data.message);
-//       alert("Failed to update status on server.");
-//     }
-//   } catch (error) {
-//     console.error('Network error:', error);
-//     alert("Could not connect to the server.");
-//   }
-// }
-
-// //Fetching the ticket from db
-// async function fetchTicketsForWorker() {
-//   if (!APP.currentUser) return; 
-
-//   try {
-//     const response = await fetch(`http://105.228.61.32:3000/tickets/technician/${APP.currentUser.user_id}`)
-//     const data = await response.json();
-    
-//     // Update the global state
-//     APP.tickets = data; 
-    
-//     renderCurrentPage(); 
-//   } catch (err) {
-//     console.error("Database sync failed:", err);
-//   }
-// }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* ================================================================
    City of Johannesburg – Public Works System
    Main Application JavaScript
@@ -1133,7 +15,10 @@ const APP = {
   tickets: [],
   allTickets: [],
   workers: [],
-  locations: []  
+  technicians: [],
+  technicianCandidates: [],
+  locations: [],
+  companies: []
 };
 
 // Initialize Application Lifecycles once DOM contents are ready
@@ -1231,6 +116,7 @@ async function navigate(page) {
     'dashboard-admin':    renderAdminDashboard,
     'all-tickets':        renderAllTickets,
     'assign-worker':      renderAssignWorker,
+    'contractor-assign':  renderContractorAssignments,
     'manage-users':       renderManageUsers,
     'reports':            renderReports,
     'notifications':      renderNotifications,
@@ -1440,6 +326,7 @@ function buildSidebar() {
       <a class="nav-link" data-page="dashboard-admin"><span class="icon">🏠</span>Dashboard</a>
       <a class="nav-link" data-page="all-tickets"><span class="icon">📋</span>All Tickets</a>
       <a class="nav-link" data-page="assign-worker"><span class="icon">👷</span>Assign Workers</a>
+      <a class="nav-link" data-page="contractor-assign"><span class="icon">🏢</span>Contractors</a>
       <a class="nav-link" data-page="manage-users"><span class="icon">👥</span>Manage Users</a>
       <a class="nav-link" data-page="reports"><span class="icon">📊</span>Reports</a>
       <div class="sidebar-section-label">Account</div>
@@ -1894,6 +781,14 @@ async function deleteTicket(ticketId, ticketTitle) {
     const row = document.getElementById(`ticket-row-${ticketId}`);
     if (row) row.remove();
 
+    // Keep in-memory ticket arrays in sync so assign-worker uses fresh data
+    APP.allTickets = APP.allTickets.filter(t => String(t.raw_id || t.id).replace(/^TK-/, '') !== String(ticketId));
+    APP.tickets = APP.tickets.filter(t => String(t.raw_id || t.id).replace(/^TK-/, '') !== String(ticketId));
+
+    if (APP.currentPage === 'assign-worker') {
+      navigate('assign-worker');
+    }
+
   } catch (err) {
     showToast('Server error. Please try again.', 'error');
     console.error(err);
@@ -1993,7 +888,7 @@ function renderAssignWorker() {
                   <td>${t.title}</td>
                   <td style="font-size:0.8rem">${t.location}</td>
                   <td>${priorityHtml(t.priority)}</td>
-                  <td>👷 ${resolveWorkerName(t) || 'Technician #' + t.worker}</td>
+                  <td>👷 ${resolveWorkerNameWithCompany(t)}</td>
                   <td>${statusBadge(t.status)}</td>
                 </tr>`).join('')}
               </tbody>
@@ -2110,10 +1005,368 @@ async function loadAppData() {
       dept:  t.skill_type || 'Technician'
     }));
 
+    APP.companies = [];
+    APP.technicians = [];
+
   } catch (err) {
     showToast('Failed to load data from server.', 'error');
     console.error(err);
   }
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+async function loadContractorAdminData() {
+  try {
+    const [companyRes, techRes, candidateRes] = await Promise.all([
+      fetch(`${API_URL}/companies`),
+      fetch(`${API_URL}/technicians/all`),
+      fetch(`${API_URL}/users/technician-candidates`)
+    ]);
+
+    const [companyData, techData, candidateData] = await Promise.all([companyRes.json(), techRes.json(), candidateRes.json()]);
+    APP.companies = companyData.companies || [];
+    APP.technicians = techData.technicians || [];
+    APP.technicianCandidates = candidateData.users || [];
+  } catch (err) {
+    showToast('Failed to load contractor data.', 'error');
+    console.error(err);
+  }
+}
+
+function getCompanyName(companyId) {
+  const company = APP.companies.find(c => String(c.company_id) === String(companyId));
+  return company ? company.company_name : 'Unassigned';
+}
+
+function companyWorkers(companyId) {
+  return APP.technicians.filter(t => String(t.company_id) === String(companyId));
+}
+
+async function renderContractorAssignments() {
+  await loadContractorAdminData();
+  const companies = APP.companies || [];
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">Contractors Management</div>
+      <div class="page-subtitle">Manage registered companies and their technicians.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><span class="card-title">Add New Company</span></div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <input class="form-control" id="new-company-name" placeholder="Company Name">
+        <input class="form-control" id="new-company-email" placeholder="Email">
+        <input class="form-control" id="new-company-phone" placeholder="Phone">
+        <textarea class="form-control" id="new-company-address" placeholder="Address"></textarea>
+        <textarea class="form-control" id="new-company-info" placeholder="Info / Notes"></textarea>
+      </div>
+      <button class="btn btn-primary" style="margin-top:1rem;" onclick="addCompany()">Add Company</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1.5rem;">
+    <div class="card-header"><span class="card-title">Companies (${companies.length})</span></div>
+    <div class="card-body" style="padding:0;">
+      ${companies.length === 0 ? `
+        <div style="padding:2rem;text-align:center;color:#888">No companies found.</div>
+      ` : `
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              ${companies.map((c, idx) => `
+                <tr id="company-row-${c.company_id}" style="border-bottom:1px solid #e2e8f0;">
+                  <td style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+                    <div style="font-weight:700;color:var(--navy);">${escapeHtml(c.company_name)}</div>
+                    <div style="display:flex;gap:0.4rem;flex-wrap:wrap;justify-content:flex-end;">
+                      <button class="btn btn-sm btn-secondary" onclick="toggleCompanyDetails(${c.company_id})">Details</button>
+                      <button class="btn btn-sm btn-primary" onclick="saveCompany(${c.company_id})">Save</button>
+                      <button class="btn btn-sm btn-danger" onclick="deleteCompany(${c.company_id})">Delete</button>
+                    </div>
+                  </td>
+                  <td></td>
+                </tr>
+                <tr id="company-details-${c.company_id}" style="display:none;">
+                  <td colspan="2" style="background:#f8f9fb;padding:1rem;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1rem;">
+                      <div>
+                        <label style="font-weight:600;">Name</label>
+                        <input class="form-control" id="company-name-${c.company_id}" value="${escapeHtml(c.company_name)}">
+                      </div>
+                      <div>
+                        <label style="font-weight:600;">Email</label>
+                        <input class="form-control" id="company-email-${c.company_id}" value="${escapeHtml(c.company_email)}">
+                      </div>
+                      <div>
+                        <label style="font-weight:600;">Phone</label>
+                        <input class="form-control" id="company-phone-${c.company_id}" value="${escapeHtml(c.company_phone)}">
+                      </div>
+                      <div>
+                        <label style="font-weight:600;">Address</label>
+                        <textarea class="form-control" id="company-address-${c.company_id}" style="min-height:60px;">${escapeHtml(c.company_address)}</textarea>
+                      </div>
+                      <div style="grid-column:1 / -1;">
+                        <label style="font-weight:600;">Info</label>
+                        <textarea class="form-control" id="company-info-${c.company_id}" style="min-height:80px;">${escapeHtml(c.company_info)}</textarea>
+                      </div>
+                    </div>
+                    <div style="font-weight:700;margin-bottom:0.5rem;">Workers at ${escapeHtml(c.company_name)}</div>
+                    ${companyWorkers(c.company_id).length === 0 ? `
+                      <div style="color:#666;padding:0.5rem 0;">No workers currently assigned.</div>
+                    ` : `
+                      <div class="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>ID</th>
+                              <th>User</th>
+                              <th>Skill</th>
+                              <th>Status</th>
+                              <th>Company</th>
+                              <th></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${companyWorkers(c.company_id).map(t => `
+                              <tr id="tech-row-${t.technician_id}">
+                                <td>${t.technician_id}</td>
+                                <td>${escapeHtml(t.name)} ${escapeHtml(t.surname)}<br><small>${escapeHtml(t.email)}</small></td>
+                                <td><input class="form-control" id="tech-skill-${t.technician_id}" value="${escapeHtml(t.skill_type)}"></td>
+                                <td>
+                                  <select class="form-control" id="tech-status-${t.technician_id}">
+                                    <option value="Active" ${t.technician_status === 'Active' ? 'selected' : ''}>Active</option>
+                                    <option value="Inactive" ${t.technician_status === 'Inactive' ? 'selected' : ''}>Inactive</option>
+                                    <option value="On Leave" ${t.technician_status === 'On Leave' ? 'selected' : ''}>On Leave</option>
+                                  </select>
+                                </td>
+                                <td>
+                                  <select class="form-control" id="tech-company-${t.technician_id}">
+                                    ${companies.map(companyOption => `
+                                      <option value="${companyOption.company_id}" ${String(companyOption.company_id) === String(t.company_id) ? 'selected' : ''}>
+                                        ${escapeHtml(companyOption.company_name)}
+                                      </option>
+                                    `).join('')}
+                                  </select>
+                                </td>
+                                <td style="white-space:nowrap;">
+                                  <button class="btn btn-sm btn-primary" onclick="saveTechnician(${t.technician_id})">Save</button>
+                                  <button class="btn btn-sm btn-danger" onclick="deleteTechnician(${t.technician_id})" style="margin-left:0.4rem;">Delete</button>
+                                </td>
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    `}
+                    <div style="margin-top:1rem;display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;align-items:end;">
+                      <div>
+                        <label style="font-weight:600;">Technician</label>
+                        <select class="form-control" id="new-tech-user-${c.company_id}">
+                          <option value="">Select technician user</option>
+                          ${APP.technicianCandidates.map(user => `
+                            <option value="${user.user_id}">${escapeHtml(user.name)} ${escapeHtml(user.surname)} (${escapeHtml(user.email)})</option>
+                          `).join('')}
+                        </select>
+                      </div>
+                      <div>
+                        <label style="font-weight:600;">Skill Type</label>
+                        <input class="form-control" id="new-tech-skill-${c.company_id}" placeholder="Skill Type">
+                      </div>
+                      <div>
+                        <label style="font-weight:600;">Status</label>
+                        <select class="form-control" id="new-tech-status-${c.company_id}">
+                          <option value="Active">Active</option>
+                          <option value="Inactive">Inactive</option>
+                          <option value="On Leave">On Leave</option>
+                        </select>
+                      </div>
+                      <button class="btn btn-primary" onclick="addTechnician(${c.company_id})">Add Worker</button>
+                    </div>
+                  </td>
+                </tr>
+                ${idx < companies.length - 1 ? '<tr><td colspan="2" style="padding:0"><div style="height:1rem;background:#f5f7fb"></div></td></tr>' : ''}
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  </div>`;
+}
+
+async function addCompany() {
+  const company_name = document.getElementById('new-company-name')?.value.trim();
+  const company_email = document.getElementById('new-company-email')?.value.trim();
+  const company_phone = document.getElementById('new-company-phone')?.value.trim();
+  const company_address = document.getElementById('new-company-address')?.value.trim();
+  const company_info = document.getElementById('new-company-info')?.value.trim();
+
+  if (!company_name) {
+    showToast('Company name is required.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/companies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name, company_email, company_phone, company_address, company_info })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Create company failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Company added successfully.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error creating company.', 'error');
+    console.error(err);
+  }
+}
+
+async function saveCompany(companyId) {
+  const company_name = document.getElementById(`company-name-${companyId}`)?.value.trim();
+  const company_email = document.getElementById(`company-email-${companyId}`)?.value.trim();
+  const company_phone = document.getElementById(`company-phone-${companyId}`)?.value.trim();
+  const company_address = document.getElementById(`company-address-${companyId}`)?.value.trim();
+  const company_info = document.getElementById(`company-info-${companyId}`)?.value.trim();
+
+  if (!company_name) {
+    showToast('Company name is required.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/companies/${companyId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_name, company_email, company_phone, company_address, company_info })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Update failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Company updated successfully.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error updating company.', 'error');
+    console.error(err);
+  }
+}
+
+async function deleteCompany(companyId) {
+  const confirmed = confirm('Delete this company? This will fail if technicians are still attached.');
+  if (!confirmed) return;
+  try {
+    const res = await fetch(`${API_URL}/companies/${companyId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Delete failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Company deleted.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error deleting company.', 'error');
+    console.error(err);
+  }
+}
+
+async function addTechnician(companyId) {
+  const user_id = document.getElementById(`new-tech-user-${companyId}`)?.value;
+  const skill_type = document.getElementById(`new-tech-skill-${companyId}`)?.value.trim();
+  const technician_status = document.getElementById(`new-tech-status-${companyId}`)?.value;
+
+  if (!user_id || !skill_type) {
+    showToast('Technician user and skill are required.', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_URL}/technicians`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: Number(user_id), company_id: companyId, skill_type, technician_status })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Add worker failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Worker added.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error adding worker.', 'error');
+    console.error(err);
+  }
+}
+
+async function saveTechnician(technicianId) {
+  const skill_type = document.getElementById(`tech-skill-${technicianId}`)?.value.trim();
+  const technician_status = document.getElementById(`tech-status-${technicianId}`)?.value;
+  const company_id = document.getElementById(`tech-company-${technicianId}`)?.value;
+
+  try {
+    const res = await fetch(`${API_URL}/technicians/${technicianId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skill_type, technician_status, company_id: Number(company_id) })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Update worker failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Worker updated.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error updating worker.', 'error');
+    console.error(err);
+  }
+}
+
+async function deleteTechnician(technicianId) {
+  const confirmed = confirm('Delete this worker?');
+  if (!confirmed) return;
+  try {
+    const res = await fetch(`${API_URL}/technicians/${technicianId}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) {
+      showToast('Delete failed: ' + data.message, 'error');
+      return;
+    }
+    showToast('Worker deleted.', 'success');
+    navigate('contractor-assign');
+  } catch (err) {
+    showToast('Server error deleting worker.', 'error');
+    console.error(err);
+  }
+}
+
+function toggleCompanyDetails(companyId) {
+  const detailsRow = document.getElementById(`company-details-${companyId}`);
+  if (!detailsRow) return;
+  detailsRow.style.display = detailsRow.style.display === 'none' || detailsRow.style.display === '' ? 'table-row' : 'none';
+}
+
+function getCompanyForTechnician(technicianId) {
+  if (!technicianId) return null;
+  const tech = APP.technicians.find(t => String(t.technician_id) === String(technicianId));
+  if (!tech || !tech.company_id) return null;
+  return APP.companies.find(c => String(c.company_id) === String(tech.company_id)) || null;
 }
 
 function resolveWorkerName(ticket) {
@@ -2121,6 +1374,12 @@ function resolveWorkerName(ticket) {
   if (!ticket.worker) return null;
   const worker = APP.workers.find(w => String(w.id) === String(ticket.worker));
   return worker ? worker.name : null;
+}
+
+function resolveWorkerNameWithCompany(ticket) {
+  const name = resolveWorkerName(ticket) || (ticket.worker ? 'Technician #' + ticket.worker : 'Unassigned');
+  const company = getCompanyForTechnician(ticket.worker);
+  return company ? `${name} (${company.company_name})` : name;
 }
 
 async function renderManageUsers() {

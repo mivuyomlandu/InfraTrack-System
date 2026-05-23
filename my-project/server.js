@@ -83,6 +83,20 @@ app.get("/users", (req, res) => {
   });
 });
 
+app.get("/users/technician-candidates", (req, res) => {
+  const sql = `
+    SELECT u.user_id, u.name, u.surname, u.email
+    FROM users u
+    LEFT JOIN technician t ON u.user_id = t.user_id
+    WHERE u.role = 'Technician' AND t.user_id IS NULL
+    ORDER BY u.name ASC, u.surname ASC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, users: result });
+  });
+});
+
 app.get("/locations", (req, res) => {
   const sql = `
     SELECT
@@ -115,6 +129,155 @@ app.get("/locations", (req, res) => {
   });
 });
 
+app.get("/companies", (req, res) => {
+  const sql = `
+    SELECT
+      company_id,
+      company_name,
+      company_info,
+      company_email,
+      company_phone,
+      company_address
+    FROM company
+    ORDER BY company_name ASC
+  `;
+
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, companies: result });
+  });
+});
+
+app.post("/companies", (req, res) => {
+  const { company_name, company_info, company_email, company_phone, company_address } = req.body;
+  if (!company_name) {
+    return res.status(400).json({ success: false, message: 'Company name is required' });
+  }
+
+  const sql = `
+    INSERT INTO company (company_name, company_info, company_email, company_phone, company_address)
+    VALUES (?, ?, ?, ?, ?)
+  `;
+  db.query(sql, [company_name, company_info || '', company_email || '', company_phone || '', company_address || ''], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, company_id: result.insertId });
+  });
+});
+
+app.put("/companies/:id", (req, res) => {
+  const { company_name, company_info, company_email, company_phone, company_address } = req.body;
+  if (!company_name) {
+    return res.status(400).json({ success: false, message: 'Company name is required' });
+  }
+
+  const sql = `
+    UPDATE company
+    SET company_name = ?, company_info = ?, company_email = ?, company_phone = ?, company_address = ?
+    WHERE company_id = ?
+  `;
+  db.query(sql, [company_name, company_info || '', company_email || '', company_phone || '', company_address || '', req.params.id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Company not found' });
+    res.json({ success: true });
+  });
+});
+
+app.delete("/companies/:id", (req, res) => {
+  const companyId = req.params.id;
+  const checkSql = "SELECT COUNT(*) AS count FROM technician WHERE company_id = ?";
+  db.query(checkSql, [companyId], (err, checkResult) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (checkResult[0].count > 0) {
+      return res.status(400).json({ success: false, message: 'Company cannot be deleted while technicians are assigned' });
+    }
+
+    const sql = "DELETE FROM company WHERE company_id = ?";
+    db.query(sql, [companyId], (deleteErr, deleteResult) => {
+      if (deleteErr) return res.status(500).json({ success: false, message: deleteErr.message });
+      if (deleteResult.affectedRows === 0) return res.status(404).json({ success: false, message: 'Company not found' });
+      res.json({ success: true });
+    });
+  });
+});
+
+app.get("/technicians/all", (req, res) => {
+  const sql = `
+    SELECT
+      t.technician_id,
+      t.user_id,
+      t.company_id,
+      t.skill_type,
+      t.technician_status,
+      u.name,
+      u.surname,
+      u.email
+    FROM technician t
+    JOIN users u ON t.user_id = u.user_id
+    LEFT JOIN company c ON t.company_id = c.company_id
+    ORDER BY u.name ASC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, technicians: result });
+  });
+});
+
+app.post("/technicians", (req, res) => {
+  const { user_id, company_id, skill_type, technician_status } = req.body;
+  if (!user_id || !company_id || !skill_type) {
+    return res.status(400).json({ success: false, message: 'User ID, company ID, and skill type are required' });
+  }
+
+  const sql = `
+    INSERT INTO technician (user_id, company_id, skill_type, technician_status)
+    VALUES (?, ?, ?, ?)
+  `;
+  db.query(sql, [user_id, company_id, skill_type, technician_status || 'Active'], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, technician_id: result.insertId });
+  });
+});
+
+app.put("/technicians/:id", (req, res) => {
+  const { skill_type, technician_status, company_id } = req.body;
+  const updates = [];
+  const values = [];
+
+  if (skill_type !== undefined) {
+    updates.push('skill_type = ?');
+    values.push(skill_type);
+  }
+  if (technician_status !== undefined) {
+    updates.push('technician_status = ?');
+    values.push(technician_status);
+  }
+  if (company_id !== undefined) {
+    updates.push('company_id = ?');
+    values.push(company_id);
+  }
+
+  if (updates.length === 0) {
+    return res.status(400).json({ success: false, message: 'No technician data provided for update' });
+  }
+
+  const sql = `UPDATE technician SET ${updates.join(', ')} WHERE technician_id = ?`;
+  values.push(req.params.id);
+  db.query(sql, values, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Technician not found' });
+    res.json({ success: true });
+  });
+});
+
+app.delete("/technicians/:id", (req, res) => {
+  const sql = "DELETE FROM technician WHERE technician_id = ?";
+  db.query(sql, [req.params.id], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ success: false, message: 'Technician not found' });
+    res.json({ success: true });
+  });
+});
+
 // ────────────────────────────────────────────
 // 🎫 GET ALL TICKETS
 // ────────────────────────────────────────────
@@ -127,6 +290,8 @@ app.get("/tickets", (req, res) => {
       t.priority,
       t.status_id,
       t.technician_id,
+      t.asset_id,
+      t.user_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date_created,
       COALESCE(a.asset_type, 'Other') AS asset_type,
       CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
