@@ -333,6 +333,9 @@ async function loadApp() {
   await loadUserTickets();
   buildSidebar();
 
+  // update notification counts
+  refreshNotificationsBadge();
+
   const defaultPage = {
     citizen: 'dashboard-citizen',
     worker: 'dashboard-worker',
@@ -352,14 +355,14 @@ function buildSidebar() {
       <a class="nav-link" data-page="my-tickets"><span class="icon">🎫</span>My Tickets <span class="nav-badge">${ticketCount}</span></a>
       <a class="nav-link" data-page="create-ticket"><span class="icon">➕</span>New Ticket</a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
     worker: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
       <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">${ticketCount}</span></a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
     admin: `
       <div class="sidebar-section-label">Management</div>
@@ -370,7 +373,7 @@ function buildSidebar() {
       <a class="nav-link" data-page="manage-users"><span class="icon">👥</span>Manage Users</a>
       <a class="nav-link" data-page="reports"><span class="icon">📊</span>Reports</a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
   };
   sidebar.innerHTML = navs[APP.currentRole];
@@ -1681,7 +1684,7 @@ async function renderNotifications() {
                     <td>${t.technician_id || '-'}</td>
                     <td>${t.title || '-'}</td>
                     <td>${priorityHtml(t.priority || 'medium')}</td>
-                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button></td>
+                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id || 'TK-' + t.ticket_id}')">View</button></td>
                     <td><button class="btn btn-sm btn-primary" onclick="completeTicket('${t.ticket_id}')">Complete</button></td>
                   </tr>
                 `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem;">No completed tickets found.</td></tr>`}
@@ -1768,6 +1771,8 @@ async function completeTicket(ticketId) {
     }
 
     showToast(`Ticket TK-${cleanTicketId} marked complete.`, 'success');
+    // refresh notification badge and reload notifications view
+    refreshNotificationsBadge();
     navigate('notifications');
   } catch (err) {
     console.error('Complete ticket error:', err);
@@ -2093,6 +2098,7 @@ async function loadUserTickets() {
 
   refreshMyTicketsBadge();
   refreshWorkerJobsBadge();
+  await refreshNotificationsBadge();
 }
 
 async function uploadTicketImage(ticketId, file, pictureType = 'before') {
@@ -2235,4 +2241,42 @@ function toggleUserSort(field) {
       </td>
     </tr>
   `).join('');
+}
+
+async function refreshNotificationsBadge() {
+  const badge = document.getElementById('notifications-badge');
+  if (!badge) return;
+  try {
+    let count = 0;
+
+    if (APP.currentRole === 'admin') {
+      const res = await fetch(`${API_URL}/tickets/status/4`);
+      const data = await res.json();
+      count = (data && Array.isArray(data.tickets)) ? data.tickets.length : 0;
+    } else if (APP.currentRole === 'worker') {
+      const techId = APP.currentUser?.technician_id || APP.currentUser?.id;
+      if (techId) {
+        const res = await fetch(`${API_URL}/tickets/technician/${encodeURIComponent(techId)}`);
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.tickets)) {
+          count = data.tickets.filter(t => (String(t.status || '').toLowerCase() === 'completed') || Number(t.status_id) === 4).length;
+        }
+      }
+    } else {
+      // citizen / default: show notifications relevant to the current user
+      const userId = APP.currentUser?.id;
+      if (userId) {
+        const res = await fetch(`${API_URL}/tickets/user/${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.tickets)) {
+          count = data.tickets.filter(t => (String(t.status || '').toLowerCase() === 'completed') || Number(t.status_id) === 4).length;
+        }
+      }
+    }
+
+    badge.textContent = String(count);
+  } catch (err) {
+    console.error('Failed to refresh notifications badge:', err);
+    badge.textContent = '0';
+  }
 }
