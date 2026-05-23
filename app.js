@@ -1900,8 +1900,9 @@ async function deleteTicket(ticketId, ticketTitle) {
   }
 }
 function renderAssignWorker() {
-  const unassigned = APP.tickets.filter(t => t.status === 'pending');
-  const assigned   = APP.tickets.filter(t => t.worker !== null);
+  const tickets = APP.allTickets.length ? APP.allTickets : APP.tickets;
+  const unassigned = tickets.filter(t => t.status === 'pending');
+  const assigned   = tickets.filter(t => t.worker !== null || t.status === 'assigned' || t.status === 'inprogress' || t.status === 'completed');
 
   return `
   <div class="page-header">
@@ -2012,7 +2013,7 @@ async function assignTicket(appId, rawId) {
   }
 
   const worker = APP.workers.find(w => w.id === workerId);
-  const ticket = APP.tickets.find(t => t.id === appId);
+  const ticket = APP.allTickets.find(t => t.id === appId) || APP.tickets.find(t => t.id === appId);
   if (!worker || !ticket) return;
 
   try {
@@ -2030,9 +2031,14 @@ async function assignTicket(appId, rawId) {
     }
 
     // Update local state immediately
-    ticket.worker     = workerId;
-    ticket.workerName = worker.name;
-    ticket.status     = 'assigned';
+    const ticketInAll = APP.allTickets.find(t => t.id === appId);
+    const ticketInUser = APP.tickets.find(t => t.id === appId);
+    [ticketInAll, ticketInUser].forEach(t => {
+      if (!t) return;
+      t.worker     = workerId;
+      t.workerName = worker.name;
+      t.status     = 'assigned';
+    });
 
     showToast(`✅ ${appId} assigned to ${worker.name}`, 'success');
     navigate('assign-worker');
