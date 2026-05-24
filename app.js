@@ -1907,42 +1907,42 @@ async function showTicketDetail(ticketId) {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
     const imageBlocks = [];
     const candidates = [
-      { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
-      { type: 'after', label: 'After Photo', ownerId: APP.currentUser?.id }
-    ].filter(c => c.ownerId);
+  { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
+  { type: 'after',  label: 'After Photo',  ownerId: null }   // ← no owner fallback for after
+].filter(c => c.type === 'after' || c.ownerId);  // before needs ownerId, after does not
 
-    for (const candidate of candidates) {
-      let foundUrl = null;
-      const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
-      try {
-        const checkRes = await fetch(typeUrl, { method: 'HEAD' });
-        if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-          foundUrl = typeUrl;
-        }
-      } catch (err) {
-        // ignore and try fallback URL
-      }
+for (const candidate of candidates) {
+  let foundUrl = null;
 
-      if (!foundUrl) {
-        const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
-        try {
-          const checkRes = await fetch(altUrl, { method: 'HEAD' });
-          if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-            foundUrl = altUrl;
-          }
-        } catch (err) {
-          // ignore
-        }
-      }
-
-      if (foundUrl) {
-        imageBlocks.push(`
-          <div class="ticket-image-card">
-            <div class="ticket-image-label">${candidate.label}</div>
-            <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}">
-          </div>`);
-      }
+  // Always try the type-based URL first (works for both before and after)
+  const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
+  try {
+    const checkRes = await fetch(typeUrl, { method: 'HEAD' });
+    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+      foundUrl = typeUrl;
     }
+  } catch (err) { }
+
+  // Owner-ID fallback ONLY for before photo, never for after
+  if (!foundUrl && candidate.type === 'before' && candidate.ownerId) {
+    const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
+    try {
+      const checkRes = await fetch(altUrl, { method: 'HEAD' });
+      if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+        foundUrl = altUrl;
+      }
+    } catch (err) { }
+  }
+
+  if (foundUrl) {
+    imageBlocks.push(`
+      <div class="ticket-image-card">
+        <div class="ticket-image-label">${candidate.label}</div>
+        <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}">
+      </div>`);
+  }
+  // If no after photo found, nothing is pushed — correct behaviour
+}
 
     if (imageBlocks.length > 0) {
       imageHtml = `<div class="ticket-image-grid">${imageBlocks.join('')}</div>`;
