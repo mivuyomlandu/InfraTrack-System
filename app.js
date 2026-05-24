@@ -265,11 +265,27 @@ function initGlobalAuthHandlers() {
         }
 
         showToast("Account created successfully!", "success");
-        handleAuthSuccess({ name, surname, email }, role);
 
-        setTimeout(() => {
-          signForm.reset();
-        }, 800);
+        // ✅ FIX: Login immediately after signup to get the full user record (including user_id)
+        try {
+          const loginRes = await fetch(`${API_URL}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+          });
+          const loginData = await loginRes.json();
+
+          if (loginData.success && loginData.user) {
+            handleAuthSuccess(loginData.user, loginData.user.role);
+          } else {
+            // Fallback: proceed without user_id (old broken behaviour)
+            handleAuthSuccess({ name, surname, email }, role);
+          }
+        } catch (loginErr) {
+          handleAuthSuccess({ name, surname, email }, role);
+        }
+
+        setTimeout(() => { signForm.reset(); }, 800);
 
       } catch (err) {
         errEl.textContent = "Server error. Please try again.";
