@@ -1667,7 +1667,172 @@ async function saveUserEdit(userId) {
     console.error(err);
   }
 }
-function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
+async function renderReports() {
+  let statuses = [];
+
+  try {
+    const res = await fetch(`${API_URL}/reports/ticket-status-counts`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.statuses)) {
+      statuses = data.statuses;
+    }
+  } catch (err) {
+    console.error('Failed to load report data:', err);
+    return `<div class="card"><div class="card-body">Unable to load report data. Please try again.</div></div>`;
+  }
+
+  const total = statuses.reduce((sum, s) => sum + Number(s.count), 0);
+
+  // Closed = Completed + Rejected. Everything else is open.
+  const closedIds  = [4, 5]; // Completed, Rejected
+  const openCount  = statuses.filter(s => !closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const closedCount = statuses.filter(s =>  closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const openPct    = total > 0 ? Math.round((openCount  / total) * 100) : 0;
+  const closedPct  = total > 0 ? Math.round((closedCount / total) * 100) : 0;
+
+  // Colour palette per status_id
+  const palette = {
+    1: { bg: '#FEF3CD', bar: '#D4A017', text: '#9A6400' }, // Pending   → gold
+    2: { bg: '#D1ECF1', bar: '#1A7BBF', text: '#0C5460' }, // Assigned  → sky
+    3: { bg: '#CCE5FF', bar: '#004085', text: '#004085' }, // In Progress → navy
+    4: { bg: '#D4EDDA', bar: '#1A8A4A', text: '#155724' }, // Completed → green
+    5: { bg: '#F8D7DA', bar: '#C0392B', text: '#721C24' }, // Rejected  → red
+  };
+
+  const maxCount = Math.max(...statuses.map(s => Number(s.count)), 1);
+
+  // Build bar chart rows
+  const barRows = statuses.map(s => {
+    const p  = palette[s.status_id] || { bg: '#F4F6F9', bar: '#8395A7', text: '#2C3E50' };
+    const cnt = Number(s.count);
+    const pct = total > 0 ? ((cnt / total) * 100).toFixed(1) : '0.0';
+    const barW = maxCount > 0 ? Math.round((cnt / maxCount) * 100) : 0;
+    return `
+      <div class="report-bar-row">
+        <div class="report-bar-label">
+          <span class="report-status-dot" style="background:${p.bar}"></span>
+          ${s.status_name}
+        </div>
+        <div class="report-bar-track">
+          <div class="report-bar-fill" style="width:${barW}%;background:${p.bar}"></div>
+        </div>
+        <div class="report-bar-count" style="color:${p.text};background:${p.bg}">
+          ${cnt} <span style="font-weight:400;font-size:0.72rem">(${pct}%)</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Build donut SVG
+  // Simple segmented ring drawn with stroke-dasharray on a circle (r=80, circumference≈502)
+  const r   = 80;
+  const cx  = 110;
+  const cy  = 110;
+  const circ = +(2 * Math.PI * r).toFixed(2); // 502.65
+
+  let offset = 0;
+  // rotate start to top (-90deg handled by transform on the group)
+  const segments = statuses.map(s => {
+    const p     = palette[s.status_id] || { bar: '#8395A7' };
+    const cnt   = Number(s.count);
+    const dash  = total > 0 ? +((cnt / total) * circ).toFixed(2) : 0;
+    const gap   = +(circ - dash).toFixed(2);
+    const seg   = `<circle
+        cx="${cx}" cy="${cy}" r="${r}"
+        fill="none"
+        stroke="${p.bar}"
+        stroke-width="36"
+        stroke-dasharray="${dash} ${gap}"
+        stroke-dashoffset="${-offset}"
+        style="transform-origin:${cx}px ${cy}px;transform:rotate(-90deg)"
+      />`;
+    offset += dash;
+    return seg;
+  }).join('');
+
+  const donutSvg = `
+    <svg viewBox="0 0 220 220" width="220" height="220" xmlns="http://www.w3.org/2000/svg">
+      <!-- background ring -->
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EFF2F5" stroke-width="36"/>
+      ${total === 0
+        ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E0E6EE" stroke-width="36"/>`
+        : segments}
+      <!-- centre label -->
+      <text x="${cx}" y="${cy - 10}" text-anchor="middle" font-family="Barlow Condensed,sans-serif"
+            font-size="32" font-weight="800" fill="#0B1F3A">${total}</text>
+      <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-family="Barlow,sans-serif"
+            font-size="11" font-weight="600" fill="#8395A7" letter-spacing="0.08em">TOTAL</text>
+    </svg>`;
+
+  // Legend pills for donut
+  const legendPills = statuses.map(s => {
+    const p = palette[s.status_id] || { bar: '#8395A7', bg: '#F4F6F9', text: '#2C3E50' };
+    return `<div class="report-legend-pill" style="background:${p.bg};color:${p.text}">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.bar};margin-right:6px;flex-shrink:0"></span>
+      ${s.status_name}: <strong style="margin-left:4px">${s.count}</strong>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">Reports</div>
+      <div class="page-subtitle">Live ticket status breakdown pulled directly from the database.</div>
+    </div>
+  </div>
+
+  <!-- Open vs Closed summary strip -->
+  <div class="report-summary-strip">
+    <div class="report-summary-card open">
+      <div class="rsc-number">${openCount}</div>
+      <div class="rsc-label">Open Tickets</div>
+      <div class="rsc-sub">Pending · Assigned · In Progress</div>
+      <div class="rsc-pct-bar"><div style="width:${openPct}%;background:#D4A017"></div></div>
+      <div class="rsc-pct-label">${openPct}% of all tickets</div>
+    </div>
+    <div class="report-summary-card closed">
+      <div class="rsc-number">${closedCount}</div>
+      <div class="rsc-label">Closed Tickets</div>
+      <div class="rsc-sub">Completed · Rejected</div>
+      <div class="rsc-pct-bar"><div style="width:${closedPct}%;background:#1A8A4A"></div></div>
+      <div class="rsc-pct-label">${closedPct}% of all tickets</div>
+    </div>
+    <div class="report-summary-card total">
+      <div class="rsc-number">${total}</div>
+      <div class="rsc-label">Total Tickets</div>
+      <div class="rsc-sub">All statuses combined</div>
+      <div class="rsc-pct-bar"><div style="width:100%;background:#1A7BBF"></div></div>
+      <div class="rsc-pct-label">100% of all tickets</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="report-charts-row">
+
+    <!-- Donut chart -->
+    <div class="card" style="flex:0 0 320px;">
+      <div class="card-header"><span class="card-title">Status Distribution</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;align-items:center;gap:1.25rem;">
+        ${donutSvg}
+        <div class="report-legend-pills">${legendPills}</div>
+      </div>
+    </div>
+
+    <!-- Horizontal bar chart -->
+    <div class="card" style="flex:1;">
+      <div class="card-header"><span class="card-title">Ticket Count by Status</span></div>
+      <div class="card-body">
+        <div class="report-bar-chart">
+          ${barRows}
+        </div>
+        <div style="margin-top:1.5rem;font-size:0.78rem;color:var(--muted);border-top:1px solid #EFF2F5;padding-top:0.75rem;">
+          Each bar is scaled relative to the highest individual count (${maxCount} tickets).
+          Percentages are out of the total ${total} tickets.
+        </div>
+      </div>
+    </div>
+
+  </div>`;
+}
 
 async function renderNotifications() {
   if (APP.currentRole === 'admin') {

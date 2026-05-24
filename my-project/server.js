@@ -616,6 +616,25 @@ app.delete("/tickets/:id", (req, res) => {
     res.json({ success: true, message: "Ticket deleted successfully" });
   });
 });
+// ────────────────────────────────────────────
+// 📊 GET TICKET STATUS COUNTS (for Reports)
+// ────────────────────────────────────────────
+app.get("/reports/ticket-status-counts", (req, res) => {
+  const sql = `
+    SELECT
+      ts.status_id,
+      ts.status_name,
+      COUNT(t.ticket_id) AS count
+    FROM ticket_status ts
+    LEFT JOIN ticket t ON ts.status_id = t.status_id
+    GROUP BY ts.status_id, ts.status_name
+    ORDER BY ts.status_id ASC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, statuses: result });
+  });
+});
 app.listen(3000, "0.0.0.0", () => {
   console.log("Server running on port 3000");
 });
