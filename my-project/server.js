@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: "localhost",
+  host: "105.228.60.227",
   user: "group",
   password: "p@$$.w03d!",
   database: "infratrack"
@@ -532,9 +532,12 @@ app.put("/tickets/:id", (req, res) => {
   
 
   if (statusId === 4) {
-    db.query("CALL move_ticket(?)", [ticketId], (err) => {
+        // Worker marks as completed — just update status, do NOT archive yet
+    // Admin will review and decide whether to archive
+    const sql = "UPDATE ticket SET status_id = 4, completion_date = CURDATE() WHERE ticket_id = ?";
+    db.query(sql, [~ ticketId], (err) => {
       if (err) return res.status(500).json({ success: false, message: err.message });
-      res.json({ success: true, status_id: 4, message: "Ticket completed and archived" });
+      res.json({ success: true, status_id: 4, message: "Ticket marked as completed. Awaiting admin approval." });
     });
   } else {
     const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
@@ -623,6 +626,43 @@ app.delete("/tickets/:id", (req, res) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.affectedRows === 0) return res.json({ success: false, message: "Ticket not found" });
     res.json({ success: true, message: "Ticket deleted successfully" });
+  });
+});
+
+// ────────────────────────────────────────────
+// ✅ ADMIN APPROVES TICKET — moves to completed_tickets
+// ────────────────────────────────────────────
+app.post("/tickets/:id/approve", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  db.query("CALL move_ticket(?)", [ticketId], (err) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: "Ticket approved and archived successfully" });
+  });
+});
+
+// ────────────────────────────────────────────
+// ❌ ADMIN REJECTS TICKET — sends back to in progress
+// ────────────────────────────────────────────
+app.post("/tickets/:id/reject-completion", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  // Send back to in progress (status_id = 3)
+  db.query("UPDATE ticket SET status_id = 3, completion_date = NULL WHERE ticket_id = ?", [ticketId], (err) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: "Ticket sent back to in progress" });
   });
 });
 // ────────────────────────────────────────────
