@@ -474,11 +474,20 @@ app.put("/tickets/:id", (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
   }
 
-  const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
-  db.query(sql, [statusId, ticketId], (err, result) => {
-    if (err) return res.status(500).json({ success: false, message: err.message });
-    res.json({ success: true, status_id: statusId, message: "Ticket status updated" });
-  });
+  
+
+  if (statusId === 4) {
+    db.query("CALL move_ticket(?)", [ticketId], (err) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, status_id: 4, message: "Ticket completed and archived" });
+    });
+  } else {
+    const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
+    db.query(sql, [statusId, ticketId], (err) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, status_id: statusId, message: "Ticket status updated" });
+    });
+  }
 });
 // ────────────────────────────────────────────
 // 👷 GET ALL ACTIVE TECHNICIANS
