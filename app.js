@@ -5,8 +5,13 @@
 
 'use strict';
 
+// Replace 105.228.61.32 with real IP
+
+const HOST = "105.228.61.32";
+
 // ── STATE ─────────────────────────────────────────────────────
-const API_URL = "http://105.228.61.32:3000";
+const API_URL = `http://${HOST}:3000`;
+const MONGO_API_URL = `http://${HOST}:3001`;
 
 const APP = {
   currentUser: null,
@@ -176,7 +181,7 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = "http://105.228.61.32:3000";
+  const API_URL = `http://${HOST}:3000`;
 
   // =========================
   // LOGIN HANDLER
@@ -264,11 +269,27 @@ function initGlobalAuthHandlers() {
         }
 
         showToast("Account created successfully!", "success");
-        handleAuthSuccess({ name, surname, email }, role);
 
-        setTimeout(() => {
-          signForm.reset();
-        }, 800);
+        // ✅ FIX: Login immediately after signup to get the full user record (including user_id)
+        try {
+          const loginRes = await fetch(`${API_URL}/login`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+          });
+          const loginData = await loginRes.json();
+
+          if (loginData.success && loginData.user) {
+            handleAuthSuccess(loginData.user, loginData.user.role);
+          } else {
+            // Fallback: proceed without user_id (old broken behaviour)
+            handleAuthSuccess({ name, surname, email }, role);
+          }
+        } catch (loginErr) {
+          handleAuthSuccess({ name, surname, email }, role);
+        }
+
+        setTimeout(() => { signForm.reset(); }, 800);
 
       } catch (err) {
         errEl.textContent = "Server error. Please try again.";
@@ -332,6 +353,9 @@ async function loadApp() {
   await loadUserTickets();
   buildSidebar();
 
+  // update notification counts
+  refreshNotificationsBadge();
+
   const defaultPage = {
     citizen: 'dashboard-citizen',
     worker: 'dashboard-worker',
@@ -351,14 +375,14 @@ function buildSidebar() {
       <a class="nav-link" data-page="my-tickets"><span class="icon">🎫</span>My Tickets <span class="nav-badge">${ticketCount}</span></a>
       <a class="nav-link" data-page="create-ticket"><span class="icon">➕</span>New Ticket</a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
     worker: `
       <div class="sidebar-section-label">Main</div>
       <a class="nav-link" data-page="dashboard-worker"><span class="icon">🏠</span>Dashboard</a>
       <a class="nav-link" data-page="assigned-jobs"><span class="icon">🔧</span>Assigned Jobs <span class="nav-badge" id="worker-jobs-badge">${ticketCount}</span></a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
     admin: `
       <div class="sidebar-section-label">Management</div>
@@ -369,7 +393,7 @@ function buildSidebar() {
       <a class="nav-link" data-page="manage-users"><span class="icon">👥</span>Manage Users</a>
       <a class="nav-link" data-page="reports"><span class="icon">📊</span>Reports</a>
       <div class="sidebar-section-label">Account</div>
-      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications</a>
+      <a class="nav-link" data-page="notifications"><span class="icon">🔔</span>Notifications <span class="nav-badge" id="notifications-badge">0</span></a>
       <a class="nav-link" data-page="profile"><span class="icon">👤</span>Profile</a>`,
   };
   sidebar.innerHTML = navs[APP.currentRole];
@@ -657,7 +681,7 @@ function renderAssignedJobs() {
                   </select>
                 </td>
                 <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id}')">View</button></td>
-                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}')">Upload Picture</button></td>
+                <td><button class="btn btn-sm btn-primary" onclick="triggerUploadPicture('${t.id}', 'after')">Upload After Photo</button></td>
               </tr>
             `).join('')}
           </tbody>
@@ -708,19 +732,27 @@ async function updateJobStatus(id, newStatus) {
   }
 }
 
-function triggerUploadPicture(ticketId) {
+async function triggerUploadPicture(ticketId, pictureType = 'before') {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/*';
   input.style.display = 'none';
-  input.onchange = () => {
+  input.onchange = async () => {
     const file = input.files && input.files[0];
     if (!file) {
       input.remove();
       return;
     }
-    showToast(`Selected "${file.name}" for ticket ${ticketId}.`, 'success');
-    // TODO: upload the selected picture to the server once an upload endpoint exists.
+
+    const typeLabel = pictureType === 'after' ? 'After' : 'Before';
+    showToast(`Uploading ${typeLabel.toLowerCase()} photo for ticket ${ticketId}...`, 'info');
+    const uploadResult = await uploadTicketImage(ticketId, file, pictureType);
+
+    if (uploadResult.success) {
+      showToast(`${typeLabel} photo uploaded for ticket ${ticketId}.`, 'success');
+    } else {
+      showToast(uploadResult.message || `Failed to upload ${typeLabel.toLowerCase()} photo.`, 'error');
+    }
     input.remove();
   };
   document.body.appendChild(input);
@@ -829,7 +861,7 @@ async function renderAdminDashboard() {
 
 async function renderAllTickets() {
   try {
-    const res = await fetch("http://105.228.61.32:3000/tickets");
+    const res = await fetch(`${API_URL}/tickets`);
     const data = await res.json();
 
     if (!data || !Array.isArray(data)) {
@@ -1639,9 +1671,215 @@ async function saveUserEdit(userId) {
     console.error(err);
   }
 }
-function renderReports() { return `<div class="card"><div class="card-body"><h3>Departmental Performance Metrics</h3></div></div>`; }
+async function renderReports() {
+  let statuses = [];
 
-function renderNotifications() {
+  try {
+    const res = await fetch(`${API_URL}/reports/ticket-status-counts`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.statuses)) {
+      statuses = data.statuses;
+    }
+  } catch (err) {
+    console.error('Failed to load report data:', err);
+    return `<div class="card"><div class="card-body">Unable to load report data. Please try again.</div></div>`;
+  }
+
+  const total = statuses.reduce((sum, s) => sum + Number(s.count), 0);
+
+  // Closed = Completed + Rejected. Everything else is open.
+  const closedIds  = [4, 5]; // Completed, Rejected
+  const openCount  = statuses.filter(s => !closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const closedCount = statuses.filter(s =>  closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const openPct    = total > 0 ? Math.round((openCount  / total) * 100) : 0;
+  const closedPct  = total > 0 ? Math.round((closedCount / total) * 100) : 0;
+
+  // Colour palette per status_id
+  const palette = {
+    1: { bg: '#FEF3CD', bar: '#D4A017', text: '#9A6400' }, // Pending   → gold
+    2: { bg: '#D1ECF1', bar: '#1A7BBF', text: '#0C5460' }, // Assigned  → sky
+    3: { bg: '#CCE5FF', bar: '#004085', text: '#004085' }, // In Progress → navy
+    4: { bg: '#D4EDDA', bar: '#1A8A4A', text: '#155724' }, // Completed → green
+    5: { bg: '#F8D7DA', bar: '#C0392B', text: '#721C24' }, // Rejected  → red
+  };
+
+  const maxCount = Math.max(...statuses.map(s => Number(s.count)), 1);
+
+  // Build bar chart rows
+  const barRows = statuses.map(s => {
+    const p  = palette[s.status_id] || { bg: '#F4F6F9', bar: '#8395A7', text: '#2C3E50' };
+    const cnt = Number(s.count);
+    const pct = total > 0 ? ((cnt / total) * 100).toFixed(1) : '0.0';
+    const barW = maxCount > 0 ? Math.round((cnt / maxCount) * 100) : 0;
+    return `
+      <div class="report-bar-row">
+        <div class="report-bar-label">
+          <span class="report-status-dot" style="background:${p.bar}"></span>
+          ${s.status_name}
+        </div>
+        <div class="report-bar-track">
+          <div class="report-bar-fill" style="width:${barW}%;background:${p.bar}"></div>
+        </div>
+        <div class="report-bar-count" style="color:${p.text};background:${p.bg}">
+          ${cnt} <span style="font-weight:400;font-size:0.72rem">(${pct}%)</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Build donut SVG
+  // Simple segmented ring drawn with stroke-dasharray on a circle (r=80, circumference≈502)
+  const r   = 80;
+  const cx  = 110;
+  const cy  = 110;
+  const circ = +(2 * Math.PI * r).toFixed(2); // 502.65
+
+  let offset = 0;
+  // rotate start to top (-90deg handled by transform on the group)
+  const segments = statuses.map(s => {
+    const p     = palette[s.status_id] || { bar: '#8395A7' };
+    const cnt   = Number(s.count);
+    const dash  = total > 0 ? +((cnt / total) * circ).toFixed(2) : 0;
+    const gap   = +(circ - dash).toFixed(2);
+    const seg   = `<circle
+        cx="${cx}" cy="${cy}" r="${r}"
+        fill="none"
+        stroke="${p.bar}"
+        stroke-width="36"
+        stroke-dasharray="${dash} ${gap}"
+        stroke-dashoffset="${-offset}"
+        style="transform-origin:${cx}px ${cy}px;transform:rotate(-90deg)"
+      />`;
+    offset += dash;
+    return seg;
+  }).join('');
+
+  const donutSvg = `
+    <svg viewBox="0 0 220 220" width="220" height="220" xmlns="http://www.w3.org/2000/svg">
+      <!-- background ring -->
+      <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EFF2F5" stroke-width="36"/>
+      ${total === 0
+        ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E0E6EE" stroke-width="36"/>`
+        : segments}
+      <!-- centre label -->
+      <text x="${cx}" y="${cy - 10}" text-anchor="middle" font-family="Barlow Condensed,sans-serif"
+            font-size="32" font-weight="800" fill="#0B1F3A">${total}</text>
+      <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-family="Barlow,sans-serif"
+            font-size="11" font-weight="600" fill="#8395A7" letter-spacing="0.08em">TOTAL</text>
+    </svg>`;
+
+  // Legend pills for donut
+  const legendPills = statuses.map(s => {
+    const p = palette[s.status_id] || { bar: '#8395A7', bg: '#F4F6F9', text: '#2C3E50' };
+    return `<div class="report-legend-pill" style="background:${p.bg};color:${p.text}">
+      <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${p.bar};margin-right:6px;flex-shrink:0"></span>
+      ${s.status_name}: <strong style="margin-left:4px">${s.count}</strong>
+    </div>`;
+  }).join('');
+
+  return `
+  <div class="page-header">
+    <div>
+      <div class="page-title">Reports</div>
+      <div class="page-subtitle">Live ticket status breakdown pulled directly from the database.</div>
+    </div>
+  </div>
+
+  <!-- Open vs Closed summary strip -->
+  <div class="report-summary-strip">
+    <div class="report-summary-card open">
+      <div class="rsc-number">${openCount}</div>
+      <div class="rsc-label">Open Tickets</div>
+      <div class="rsc-sub">Pending · Assigned · In Progress</div>
+      <div class="rsc-pct-bar"><div style="width:${openPct}%;background:#D4A017"></div></div>
+      <div class="rsc-pct-label">${openPct}% of all tickets</div>
+    </div>
+    <div class="report-summary-card closed">
+      <div class="rsc-number">${closedCount}</div>
+      <div class="rsc-label">Closed Tickets</div>
+      <div class="rsc-sub">Completed · Rejected</div>
+      <div class="rsc-pct-bar"><div style="width:${closedPct}%;background:#1A8A4A"></div></div>
+      <div class="rsc-pct-label">${closedPct}% of all tickets</div>
+    </div>
+    <div class="report-summary-card total">
+      <div class="rsc-number">${total}</div>
+      <div class="rsc-label">Total Tickets</div>
+      <div class="rsc-sub">All statuses combined</div>
+      <div class="rsc-pct-bar"><div style="width:100%;background:#1A7BBF"></div></div>
+      <div class="rsc-pct-label">100% of all tickets</div>
+    </div>
+  </div>
+
+  <!-- Charts row -->
+  <div class="report-charts-row">
+
+    <!-- Donut chart -->
+    <div class="card" style="flex:0 0 320px;">
+      <div class="card-header"><span class="card-title">Status Distribution</span></div>
+      <div class="card-body" style="display:flex;flex-direction:column;align-items:center;gap:1.25rem;">
+        ${donutSvg}
+        <div class="report-legend-pills">${legendPills}</div>
+      </div>
+    </div>
+
+    <!-- Horizontal bar chart -->
+    <div class="card" style="flex:1;">
+      <div class="card-header"><span class="card-title">Ticket Count by Status</span></div>
+      <div class="card-body">
+        <div class="report-bar-chart">
+          ${barRows}
+        </div>
+        <div style="margin-top:1.5rem;font-size:0.78rem;color:var(--muted);border-top:1px solid #EFF2F5;padding-top:0.75rem;">
+          Each bar is scaled relative to the highest individual count (${maxCount} tickets).
+          Percentages are out of the total ${total} tickets.
+        </div>
+      </div>
+    </div>
+
+  </div>`;
+}
+
+async function renderNotifications() {
+  if (APP.currentRole === 'admin') {
+    let tickets = [];
+    try {
+      const res = await fetch(`${API_URL}/tickets/status/4`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.tickets)) {
+        tickets = data.tickets;
+      }
+    } catch (err) {
+      console.error('Failed to load admin notifications:', err);
+    }
+
+    return `
+      <div class="page-header">
+        <div><div class="page-title">Notifications Hub</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Completed Tickets</span></div>
+        <div class="card-body" style="padding:0">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Ticket ID</th><th>User ID</th><th>Technician ID</th><th>Title</th><th>Priority</th><th>View</th><th>Complete</th></tr></thead>
+              <tbody>
+                ${tickets.map(t => `
+                  <tr id="admin-notice-${t.ticket_id}">
+                    <td style="font-weight:700;color:var(--navy)">TK-${t.ticket_id}</td>
+                    <td>${t.user_id || '-'}</td>
+                    <td>${t.technician_id || '-'}</td>
+                    <td>${t.title || '-'}</td>
+                    <td>${priorityHtml(t.priority || 'medium')}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id || 'TK-' + t.ticket_id}')">View</button></td>
+                    <td><button class="btn btn-sm btn-primary" onclick="completeTicket('${t.ticket_id}')">Complete</button></td>
+                  </tr>
+                `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem;">No completed tickets found.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>`;
+  }
+
   const isWorker = APP.currentRole === 'worker';
 
   const myRelevantData = APP.tickets.filter(t =>
@@ -1700,6 +1938,31 @@ function renderNotifications() {
         `).join('')}
       </div>
     </div>`;
+}
+
+async function completeTicket(ticketId) {
+  if (!ticketId) return;
+  const cleanTicketId = String(ticketId).replace(/^TK-/, '');
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${encodeURIComponent(cleanTicketId)}/complete`, {
+      method: 'PUT'
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast(data.message || 'Unable to complete ticket.', 'error');
+      return;
+    }
+
+    showToast(`Ticket TK-${cleanTicketId} marked complete.`, 'success');
+    // refresh notification badge and reload notifications view
+    refreshNotificationsBadge();
+    navigate('notifications');
+  } catch (err) {
+    console.error('Complete ticket error:', err);
+    showToast('Unable to complete the ticket right now.', 'error');
+  }
 }
 
 function renderProfile() {
@@ -1767,33 +2030,115 @@ function renderProfile() {
 
 // ── MODAL POPUP FOR TICKET DETAILS ────────────────────────────
 async function showTicketDetail(ticketId) {
-  const ticket = APP.tickets.find(t => t.id === ticketId);
-  if (!ticket) return;
+  let ticket = APP.tickets.find(t => t.id === ticketId);
+
+  // If the ticket isn't in memory, fetch its full details from the API
+  if (!ticket) {
+    try {
+      const res = await fetch(`${API_URL}/tickets/id/${encodeURIComponent(ticketId)}`);
+      const data = await res.json();
+      if (data.success && data.ticket) {
+        ticket = formatTicketRow(data.ticket);
+        const idx = APP.tickets.findIndex(t => t.id === ticket.id);
+        if (idx === -1) {
+          APP.tickets.unshift(ticket);
+        } else {
+          APP.tickets[idx] = ticket;
+        }
+      } else {
+        showToast('Ticket not found.', 'error');
+        return;
+      }
+    } catch (err) {
+      console.error('Failed to load ticket details:', err);
+      showToast('Unable to load ticket details right now.', 'error');
+      return;
+    }
+  }
+
+  if (!ticket.reporterName && ticket.user_id) {
+    try {
+      const res = await fetch(`${API_URL}/users`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.users)) {
+        const user = data.users.find(u => String(u.user_id) === String(ticket.user_id));
+        if (user) {
+          ticket.reporterName = `${user.name || ''} ${user.surname || ''}`.trim() || user.email || `User #${user.user_id}`;
+        }
+      }
+    } catch (err) {
+      console.warn('Unable to load reporter name from users list for', ticket.user_id, err);
+    }
+  }
 
   let imageHtml = '';
   try {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
-    const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
-    for (const ownerId of ownerIds) {
-      const imageUrl = `http://105.228.61.32:3001/picture/${ticketNumId}/${ownerId}`;
-      try {
-        const checkRes = await fetch(imageUrl);
-        if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-          imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
-          break;
+    const imageBlocks = [];
+    const candidates = [
+  { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
+  { type: 'after',  label: 'After Photo',  ownerId: null }   // ← no owner fallback for after
+].filter(c => c.type === 'after' || c.ownerId);  // before needs ownerId, after does not
+
+for (const candidate of candidates) {
+  let foundUrl = null;
+
+  // Always try the type-based URL first (works for both before and after)
+  const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
+  try {
+    const checkRes = await fetch(typeUrl, { method: 'HEAD' });
+    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+      foundUrl = typeUrl;
+    }
+  } catch (err) { }
+
+  // Owner-ID fallback ONLY for before photo, never for after
+  if (!foundUrl && candidate.type === 'before' && candidate.ownerId) {
+    const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
+    try {
+      const checkRes = await fetch(altUrl, { method: 'HEAD' });
+      if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+        foundUrl = altUrl;
+      }
+    } catch (err) { }
+  }
+
+  if (foundUrl) {
+    imageBlocks.push(`
+      <div class="ticket-image-card">
+        <div class="ticket-image-label">${candidate.label}</div>
+        <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}">
+      </div>`);
+  }
+  // If no after photo found, nothing is pushed — correct behaviour
+}
+
+    if (imageBlocks.length > 0) {
+      imageHtml = `<div class="ticket-image-grid">${imageBlocks.join('')}</div>`;
+    } else {
+      const ownerIds = [ticket.reporterId, ticket.user_id, ticket.creator_id, ticket.reporter_id, APP.currentUser?.id].filter(Boolean);
+      for (const ownerId of ownerIds) {
+        const imageUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${ownerId}`;
+        try {
+          const checkRes = await fetch(imageUrl, { method: 'HEAD' });
+          if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+            imageHtml = `<div style="margin-top:1rem; text-align:center;"><img src="${imageUrl}" alt="Ticket picture" style="max-width:100%; max-height:300px; border-radius:4px; box-shadow:0 2px 8px rgba(0,0,0,0.1);"></div>`;
+            break;
+          }
+        } catch (err) {
+          // continue to next candidate
         }
-      } catch (err) {
-        // continue to next candidate
       }
     }
   } catch (err) {
     console.log('No image for ticket', ticketId);
   }
 
-  const reporterInfo = ticket.reporterName ? `${ticket.reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
+  const reporterName = ticket.reporterName || (ticket.user_id && String(ticket.user_id) === String(APP.currentUser?.id) ? APP.currentUser.name : null);
+  const reporterInfo = reporterName ? `${reporterName} (${ticket.reporterId ? `ID: ${ticket.reporterId}` : 'ID: unknown'})` : (ticket.user_id ? `User #${ticket.user_id}` : 'Citizen user details unavailable');
   const overlayHtml = `
     <div class="modal-overlay" id="ticket-modal" onclick="closeTicketModal()">
-      <div class="modal" onclick="event.stopPropagation()">
+      <div class="modal large" onclick="event.stopPropagation()">
         <div class="modal-header">
           <div class="modal-title">Fault Summary: ${ticket.id}</div>
           <button class="modal-close" onclick="closeTicketModal()">&times;</button>
@@ -1858,8 +2203,8 @@ function formatTicketRow(row) {
     worker: row.worker || null,
     technician_id: row.technician_id != null ? String(row.technician_id) : (row.technicianId != null ? String(row.technicianId) : null),
     user_id: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
-    reporterId: row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
-    reporterName: row.reporter_name || row.user_name || row.name || row.reporter || row.requester || null,
+    reporterId: row.reporter_id || row.user_id || row.creator_id || row.reporter_id || row.requester_id || null,
+    reporterName: row.reporter_name || `${row.name || ''} ${row.surname || ''}`.trim() || row.user_name || row.reporter || row.requester || null,
     desc: row.description || row.desc || ''
   };
 }
@@ -1945,22 +2290,23 @@ async function loadUserTickets() {
 
   refreshMyTicketsBadge();
   refreshWorkerJobsBadge();
+  await refreshNotificationsBadge();
 }
 
-async function uploadTicketImage(ticketId, file) {
+async function uploadTicketImage(ticketId, file, pictureType = 'before') {
   if (!file || !ticketId || !APP.currentUser?.id) {
     return { success: false, message: 'Missing required fields for image upload.' };
   }
 
   const formData = new FormData();
   formData.append('picture', file);
-  // Strip TK- prefix if present
   const cleanTicketId = String(ticketId).replace(/^TK-/, '');
   formData.append('ticket_id', cleanTicketId);
   formData.append('user_id', String(APP.currentUser.id));
+  formData.append('picture_type', pictureType);
 
   try {
-    const res = await fetch('http://105.228.61.32:3001/upload-picture', {
+    const res = await fetch(`${MONGO_API_URL}/upload-picture`, {
       method: 'POST',
       body: formData
     });
@@ -2087,4 +2433,42 @@ function toggleUserSort(field) {
       </td>
     </tr>
   `).join('');
+}
+
+async function refreshNotificationsBadge() {
+  const badge = document.getElementById('notifications-badge');
+  if (!badge) return;
+  try {
+    let count = 0;
+
+    if (APP.currentRole === 'admin') {
+      const res = await fetch(`${API_URL}/tickets/status/4`);
+      const data = await res.json();
+      count = (data && Array.isArray(data.tickets)) ? data.tickets.length : 0;
+    } else if (APP.currentRole === 'worker') {
+      const techId = APP.currentUser?.technician_id || APP.currentUser?.id;
+      if (techId) {
+        const res = await fetch(`${API_URL}/tickets/technician/${encodeURIComponent(techId)}`);
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.tickets)) {
+          count = data.tickets.filter(t => (String(t.status || '').toLowerCase() === 'completed') || Number(t.status_id) === 4).length;
+        }
+      }
+    } else {
+      // citizen / default: show notifications relevant to the current user
+      const userId = APP.currentUser?.id;
+      if (userId) {
+        const res = await fetch(`${API_URL}/tickets/user/${encodeURIComponent(userId)}`);
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.tickets)) {
+          count = data.tickets.filter(t => (String(t.status || '').toLowerCase() === 'completed') || Number(t.status_id) === 4).length;
+        }
+      }
+    }
+
+    badge.textContent = String(count);
+  } catch (err) {
+    console.error('Failed to refresh notifications badge:', err);
+    badge.textContent = '0';
+  }
 }

@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: "105.228.61.32",
+  host: "localhost",
   user: "group",
   password: "p@$$.w03d!",
   database: "infratrack"
@@ -309,6 +309,52 @@ app.get("/tickets", (req, res) => {
   });
 });
 
+app.get("/tickets/status/:statusId", (req, res) => {
+  const statusId = Number(req.params.statusId);
+  if (![1, 2, 3, 4, 5].includes(statusId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket status filter' });
+  }
+
+  const sql = `
+    SELECT
+      t.ticket_id,
+      t.user_id,
+      t.technician_id,
+      t.title,
+      t.priority,
+      t.status_id
+    FROM ticket t
+    WHERE t.status_id = ?
+    ORDER BY t.ticket_id DESC
+  `;
+
+  db.query(sql, [statusId], (err, result) => {
+    if (err) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+    res.json({ success: true, tickets: result });
+  });
+});
+
+app.put("/tickets/:id/complete", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  const sql = `UPDATE ticket SET completion_date = CURDATE(), status_id = 4 WHERE ticket_id = ?`;
+  db.query(sql, [ticketId], (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: 'Ticket not found' });
+    }
+    res.json({ success: true, message: 'Ticket completion updated' });
+  });
+});
+
 // ────────────────────────────────────────────
 // 🎫 GET TICKETS BY USER
 // ────────────────────────────────────────────
@@ -322,8 +368,11 @@ app.get("/tickets/user/:user_id", (req, res) => {
       t.status_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
-      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.user_id = ?
@@ -358,8 +407,11 @@ app.get("/tickets/technician/:tech_id", (req, res) => {
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
       CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
-      t.technician_id
+      t.technician_id,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.technician_id = ?
@@ -396,8 +448,11 @@ app.get("/tickets/id/:ticketId", (req, res) => {
       t.status_id,
       DATE_FORMAT(t.date_created, '%Y-%m-%d') AS date,
       COALESCE(a.asset_type, 'Other') AS category,
-      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location
+      CONCAT(COALESCE(l.street, ''), ', ', COALESCE(l.suburb, '')) AS location,
+      t.user_id AS reporter_id,
+      CONCAT(COALESCE(u.name, ''), ' ', COALESCE(u.surname, '')) AS reporter_name
     FROM ticket t
+    LEFT JOIN users u ON t.user_id = u.user_id
     LEFT JOIN asset a ON t.asset_id = a.asset_id
     LEFT JOIN location l ON a.location_id = l.location_id
     WHERE t.ticket_id = ?
@@ -568,6 +623,25 @@ app.delete("/tickets/:id", (req, res) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.affectedRows === 0) return res.json({ success: false, message: "Ticket not found" });
     res.json({ success: true, message: "Ticket deleted successfully" });
+  });
+});
+// ────────────────────────────────────────────
+// 📊 GET TICKET STATUS COUNTS (for Reports)
+// ────────────────────────────────────────────
+app.get("/reports/ticket-status-counts", (req, res) => {
+  const sql = `
+    SELECT
+      ts.status_id,
+      ts.status_name,
+      COUNT(t.ticket_id) AS count
+    FROM ticket_status ts
+    LEFT JOIN ticket t ON ts.status_id = t.status_id
+    GROUP BY ts.status_id, ts.status_name
+    ORDER BY ts.status_id ASC
+  `;
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, statuses: result });
   });
 });
 app.listen(3000, "0.0.0.0", () => {
