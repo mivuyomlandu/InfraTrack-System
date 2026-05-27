@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: "105.228.61.32",
+  host: "localhost",
   user: "group",
   password: "p@$$.w03d!",
   database: "infratrack"

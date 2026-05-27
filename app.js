@@ -3,11 +3,15 @@
    Main Application JavaScript
    ================================================================ */
 
-'use strict';   //105.228.61.32
+'use strict';
+
+// Replace 105.228.61.32 with real IP
+
+const HOST = "105.228.61.32";
 
 // ── STATE ─────────────────────────────────────────────────────
-const API_URL = "http://105.228.61.32:3000";
-const MONGO_API_URL = "http://105.228.61.32:3001";
+const API_URL = `http://${HOST}:3000`;
+const MONGO_API_URL = `http://${HOST}:3001`;
 
 const APP = {
   currentUser: null,
@@ -177,7 +181,7 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = "http://105.228.61.32:3000";
+  const API_URL = `http://${HOST}:3000`;
 
   // =========================
   // LOGIN HANDLER
@@ -857,7 +861,7 @@ async function renderAdminDashboard() {
 
 async function renderAllTickets() {
   try {
-    const res = await fetch("http://105.228.61.32:3000/tickets");
+    const res = await fetch(`${API_URL}/tickets`);
     const data = await res.json();
 
     if (!data || !Array.isArray(data)) {
