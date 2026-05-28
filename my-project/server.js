@@ -532,10 +532,10 @@ app.put("/tickets/:id", (req, res) => {
   
 
   if (statusId === 4) {
-        // Worker marks as completed — just update status, do NOT archive yet
+    // Worker marks as completed — just update status, do NOT archive yet
     // Admin will review and decide whether to archive
     const sql = "UPDATE ticket SET status_id = 4, completion_date = CURDATE() WHERE ticket_id = ?";
-    db.query(sql, [~ ticketId], (err) => {
+    db.query(sql, [ticketId], (err) => {
       if (err) return res.status(500).json({ success: false, message: err.message });
       res.json({ success: true, status_id: 4, message: "Ticket marked as completed. Awaiting admin approval." });
     });

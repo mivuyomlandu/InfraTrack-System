@@ -2571,5 +2571,7 @@ async function refreshNotificationsBadge() {
 }
 
 
+window.updateJobStatus = updateJobStatus;
+window.completeTicket = completeTicket;
 window.adminApproveTicket = adminApproveTicket;
 window.adminRejectTicket = adminRejectTicket;
