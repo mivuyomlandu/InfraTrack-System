@@ -917,10 +917,9 @@ async function renderAllTickets() {
                   <td>${t.asset_id || '-'}</td>
                   <td>${t.user_id || '-'}</td>
                  <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
-                 <td>
-                 <button class="btn btn-sm btn-danger" onclick="deleteTicket(${t.ticket_id}, '${t.title?.replace(/'/g, '')}')">
-                 Delete
-                 </button>
+                 <td style="display:flex;gap:0.4rem;align-items:center;">
+                 <button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button>
+                 <button class="btn btn-sm btn-danger" onclick="deleteTicket(${t.ticket_id}, '${t.title?.replace(/'/g, '')}')">Delete</button>
                  </td>
                 </tr>`).join('')}
             </tbody>
@@ -1887,6 +1886,7 @@ async function renderNotifications() {
                   <th>User ID</th>
                   <th>Technician ID</th>
                   <th>Priority</th>
+                  <th>View</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -1902,6 +1902,7 @@ async function renderNotifications() {
                     <td>${t.user_id || '-'}</td>
                     <td>${t.technician_id || '-'}</td>
                     <td>${priorityHtml(t.priority || 'medium')}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button></td>
                     <td style="display:flex;gap:0.5rem;">
                       <button class="btn btn-sm btn-primary" 
                         onclick="adminApproveTicket(${t.ticket_id})">
