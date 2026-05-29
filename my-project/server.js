@@ -4,11 +4,23 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost',
+    'http://localhost:5500',    // VS Code Live Server default
+    'http://127.0.0.1',
+    'http://127.0.0.1:5500',   // VS Code Live Server with IP
+    'https://www.datcom.co.za',
+    'https://datcom.co.za',
+    'https://infratrack.ddns.net',
+    'http://infratrack.ddns.net'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 const db = mysql.createConnection({
-  host: "105.228.60.227",
+  host: "localhost",
   user: "group",
   password: "p@$$.w03d!",
   database: "infratrack"

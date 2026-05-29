@@ -5,13 +5,25 @@
 
 'use strict';
 
-// Replace 105.228.61.32 with real IP
+// ── STATE ─────────────────────────────────────────────────────
 
-const HOST = "localhost";
+//Local
+//const HOST = "localhost";
+//const HOST = "105.228.61.32";
+//Online
+const HOST = "infratrack.ddns.net";
 
 // ── STATE ─────────────────────────────────────────────────────
+// Note: Use https:// and remove the port numbers. 
+// We will separate the traffic using paths (/api/main and /api/mongo)
+
+//Local
 const API_URL = `http://${HOST}:3000`;
 const MONGO_API_URL = `http://${HOST}:3001`;
+
+//Online
+//const API_URL = `https://${HOST}/api/main`;
+//const MONGO_API_URL = `https://${HOST}/api/mongo`;
 
 const APP = {
   currentUser: null,
@@ -182,8 +194,7 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = `http://${HOST}:3000`;
-
+  
   // =========================
   // LOGIN HANDLER
   // =========================
