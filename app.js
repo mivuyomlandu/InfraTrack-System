@@ -5,13 +5,26 @@
 
 'use strict';
 
-// Replace 105.228.61.32 with real IP
+// ── STATE ─────────────────────────────────────────────────────
 
-const HOST = "105.228.61.32";
+//Local
+//const HOST = "localhost";
+//const HOST = "105.228.61.32";
+//Online
+const HOST = "infratrack.ddns.net";
+const HTTPS_PORT = 8443; // ← your custom HTTPS port
 
 // ── STATE ─────────────────────────────────────────────────────
+// Note: Use https:// and remove the port numbers. 
+// We will separate the traffic using paths (/api/main and /api/mongo)
+
+//Local
 const API_URL = `http://${HOST}:3000`;
 const MONGO_API_URL = `http://${HOST}:3001`;
+
+//Online
+//const API_URL = `https://${HOST}:${HTTPS_PORT}/api/main`;
+//const MONGO_API_URL = `https://${HOST}:${HTTPS_PORT}/api/mongo`;
 
 const APP = {
   currentUser: null,
@@ -31,6 +44,7 @@ const APP = {
 // Initialize Application Lifecycles once DOM contents are ready
 document.addEventListener('DOMContentLoaded', () => {
   initGlobalAuthHandlers();
+
 });
 
 // ── SCREEN NAVIGATION CONTROLLER ─────────────────────────────
@@ -181,8 +195,7 @@ function handleGuestLogTicket() {
 
 // ── LOGIN & SIGNUP FORMS HANDLERS (REAL BACKEND VERSION) ─────────────────────────────
 function initGlobalAuthHandlers() {
-  const API_URL = `http://${HOST}:3000`;
-
+  
   // =========================
   // LOGIN HANDLER
   // =========================
@@ -904,10 +917,9 @@ async function renderAllTickets() {
                   <td>${t.asset_id || '-'}</td>
                   <td>${t.user_id || '-'}</td>
                  <td style="font-size:0.8rem">${t.date_created ? new Date(t.date_created).toLocaleDateString() : '-'}</td>
-                 <td>
-                 <button class="btn btn-sm btn-danger" onclick="deleteTicket(${t.ticket_id}, '${t.title?.replace(/'/g, '')}')">
-                 Delete
-                 </button>
+                 <td style="display:flex;gap:0.4rem;align-items:center;">
+                 <button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button>
+                 <button class="btn btn-sm btn-danger" onclick="deleteTicket(${t.ticket_id}, '${t.title?.replace(/'/g, '')}')">Delete</button>
                  </td>
                 </tr>`).join('')}
             </tbody>
@@ -1688,11 +1700,11 @@ async function renderReports() {
   const total = statuses.reduce((sum, s) => sum + Number(s.count), 0);
 
   // Closed = Completed + Rejected. Everything else is open.
-  const closedIds  = [4, 5]; // Completed, Rejected
-  const openCount  = statuses.filter(s => !closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
-  const closedCount = statuses.filter(s =>  closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
-  const openPct    = total > 0 ? Math.round((openCount  / total) * 100) : 0;
-  const closedPct  = total > 0 ? Math.round((closedCount / total) * 100) : 0;
+  const closedIds = [4, 5]; // Completed, Rejected
+  const openCount = statuses.filter(s => !closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const closedCount = statuses.filter(s => closedIds.includes(s.status_id)).reduce((sum, s) => sum + Number(s.count), 0);
+  const openPct = total > 0 ? Math.round((openCount / total) * 100) : 0;
+  const closedPct = total > 0 ? Math.round((closedCount / total) * 100) : 0;
 
   // Colour palette per status_id
   const palette = {
@@ -1707,7 +1719,7 @@ async function renderReports() {
 
   // Build bar chart rows
   const barRows = statuses.map(s => {
-    const p  = palette[s.status_id] || { bg: '#F4F6F9', bar: '#8395A7', text: '#2C3E50' };
+    const p = palette[s.status_id] || { bg: '#F4F6F9', bar: '#8395A7', text: '#2C3E50' };
     const cnt = Number(s.count);
     const pct = total > 0 ? ((cnt / total) * 100).toFixed(1) : '0.0';
     const barW = maxCount > 0 ? Math.round((cnt / maxCount) * 100) : 0;
@@ -1728,19 +1740,19 @@ async function renderReports() {
 
   // Build donut SVG
   // Simple segmented ring drawn with stroke-dasharray on a circle (r=80, circumference≈502)
-  const r   = 80;
-  const cx  = 110;
-  const cy  = 110;
+  const r = 80;
+  const cx = 110;
+  const cy = 110;
   const circ = +(2 * Math.PI * r).toFixed(2); // 502.65
 
   let offset = 0;
   // rotate start to top (-90deg handled by transform on the group)
   const segments = statuses.map(s => {
-    const p     = palette[s.status_id] || { bar: '#8395A7' };
-    const cnt   = Number(s.count);
-    const dash  = total > 0 ? +((cnt / total) * circ).toFixed(2) : 0;
-    const gap   = +(circ - dash).toFixed(2);
-    const seg   = `<circle
+    const p = palette[s.status_id] || { bar: '#8395A7' };
+    const cnt = Number(s.count);
+    const dash = total > 0 ? +((cnt / total) * circ).toFixed(2) : 0;
+    const gap = +(circ - dash).toFixed(2);
+    const seg = `<circle
         cx="${cx}" cy="${cy}" r="${r}"
         fill="none"
         stroke="${p.bar}"
@@ -1758,8 +1770,8 @@ async function renderReports() {
       <!-- background ring -->
       <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#EFF2F5" stroke-width="36"/>
       ${total === 0
-        ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E0E6EE" stroke-width="36"/>`
-        : segments}
+      ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E0E6EE" stroke-width="36"/>`
+      : segments}
       <!-- centre label -->
       <text x="${cx}" y="${cy - 10}" text-anchor="middle" font-family="Barlow Condensed,sans-serif"
             font-size="32" font-weight="800" fill="#0B1F3A">${total}</text>
@@ -1842,6 +1854,8 @@ async function renderNotifications() {
   if (APP.currentRole === 'admin') {
     let tickets = [];
     try {
+      // Fetch tickets that workers have marked as completed (status_id = 4)
+      // These are awaiting admin approval
       const res = await fetch(`${API_URL}/tickets/status/4`);
       const data = await res.json();
       if (data.success && Array.isArray(data.tickets)) {
@@ -1853,32 +1867,62 @@ async function renderNotifications() {
 
     return `
       <div class="page-header">
-        <div><div class="page-title">Notifications Hub</div></div>
+        <div>
+          <div class="page-title">Notifications Hub</div>
+          <div class="page-subtitle">Tickets marked complete by workers — awaiting your approval.</div>
+        </div>
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Completed Tickets</span></div>
+        <div class="card-header">
+          <span class="card-title">Pending Admin Approval (${tickets.length})</span>
+        </div>
         <div class="card-body" style="padding:0">
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Ticket ID</th><th>User ID</th><th>Technician ID</th><th>Title</th><th>Priority</th><th>View</th><th>Complete</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>Title</th>
+                  <th>User ID</th>
+                  <th>Technician ID</th>
+                  <th>Priority</th>
+                  <th>View</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
-                ${tickets.map(t => `
+                ${tickets.length === 0
+        ? `<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:1.5rem;">
+                      ✅ No tickets awaiting approval.
+                     </td></tr>`
+        : tickets.map(t => `
                   <tr id="admin-notice-${t.ticket_id}">
                     <td style="font-weight:700;color:var(--navy)">TK-${t.ticket_id}</td>
+                    <td>${t.title || '-'}</td>
                     <td>${t.user_id || '-'}</td>
                     <td>${t.technician_id || '-'}</td>
-                    <td>${t.title || '-'}</td>
                     <td>${priorityHtml(t.priority || 'medium')}</td>
-                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('${t.id || 'TK-' + t.ticket_id}')">View</button></td>
-                    <td><button class="btn btn-sm btn-primary" onclick="completeTicket('${t.ticket_id}')">Complete</button></td>
+                    <td><button class="btn btn-sm btn-outline" onclick="showTicketDetail('TK-${t.ticket_id}')">View</button></td>
+                    <td style="display:flex;gap:0.5rem;">
+                      <button class="btn btn-sm btn-primary" 
+                        onclick="adminApproveTicket(${t.ticket_id})">
+                        ✅ Approve
+                      </button>
+                      <button class="btn btn-sm btn-danger" 
+                        onclick="adminRejectTicket(${t.ticket_id})">
+                        ❌ Reject
+                      </button>
+                    </td>
                   </tr>
-                `).join('') || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:1rem;">No completed tickets found.</td></tr>`}
+                `).join('')}
               </tbody>
             </table>
           </div>
         </div>
       </div>`;
   }
+
+
 
   const isWorker = APP.currentRole === 'worker';
 
@@ -1938,6 +1982,70 @@ async function renderNotifications() {
         `).join('')}
       </div>
     </div>`;
+}
+
+// ── ADMIN APPROVE TICKET (global) ─────────────────────────────
+async function adminApproveTicket(ticketId) {
+  const confirmed = confirm(`Approve and archive ticket TK-${ticketId}? This cannot be undone.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${ticketId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Approval failed: ' + data.message, 'error');
+      return;
+    }
+
+    showToast(`✅ Ticket TK-${ticketId} approved and archived.`, 'success');
+
+    // Remove row from table instantly
+    const row = document.getElementById(`admin-notice-${ticketId}`);
+    if (row) row.remove();
+
+    // Update notifications badge
+    refreshNotificationsBadge();
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
+  }
+}
+
+// ── ADMIN REJECT TICKET COMPLETION (global) ───────────────────
+async function adminRejectTicket(ticketId) {
+  const confirmed = confirm(`Reject completion of TK-${ticketId}? It will be sent back to In Progress.`);
+  if (!confirmed) return;
+
+  try {
+    const res = await fetch(`${API_URL}/tickets/${ticketId}/reject-completion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      showToast('Rejection failed: ' + data.message, 'error');
+      return;
+    }
+
+    showToast(`🔄 Ticket TK-${ticketId} sent back to In Progress.`, 'info');
+
+    // Remove row from notifications table
+    const row = document.getElementById(`admin-notice-${ticketId}`);
+    if (row) row.remove();
+
+    // Update notifications badge
+    refreshNotificationsBadge();
+
+  } catch (err) {
+    showToast('Server error. Please try again.', 'error');
+    console.error(err);
+  }
 }
 
 async function completeTicket(ticketId) {
@@ -2076,42 +2184,42 @@ async function showTicketDetail(ticketId) {
     const ticketNumId = String(ticketId).replace(/^TK-/, '');
     const imageBlocks = [];
     const candidates = [
-  { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
-  { type: 'after',  label: 'After Photo',  ownerId: null }   // ← no owner fallback for after
-].filter(c => c.type === 'after' || c.ownerId);  // before needs ownerId, after does not
+      { type: 'before', label: 'Before Photo', ownerId: ticket.user_id },
+      { type: 'after', label: 'After Photo', ownerId: null }   // ← no owner fallback for after
+    ].filter(c => c.type === 'after' || c.ownerId);  // before needs ownerId, after does not
 
-for (const candidate of candidates) {
-  let foundUrl = null;
+    for (const candidate of candidates) {
+      let foundUrl = null;
 
-  // Always try the type-based URL first (works for both before and after)
-  const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
-  try {
-    const checkRes = await fetch(typeUrl, { method: 'HEAD' });
-    if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-      foundUrl = typeUrl;
-    }
-  } catch (err) { }
+      // Always try the type-based URL first (works for both before and after)
+      const typeUrl = `${MONGO_API_URL}/picture/type/${ticketNumId}/${candidate.type}`;
+      try {
+        const checkRes = await fetch(typeUrl, { method: 'HEAD' });
+        if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+          foundUrl = typeUrl;
+        }
+      } catch (err) { }
 
-  // Owner-ID fallback ONLY for before photo, never for after
-  if (!foundUrl && candidate.type === 'before' && candidate.ownerId) {
-    const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
-    try {
-      const checkRes = await fetch(altUrl, { method: 'HEAD' });
-      if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
-        foundUrl = altUrl;
+      // Owner-ID fallback ONLY for before photo, never for after
+      if (!foundUrl && candidate.type === 'before' && candidate.ownerId) {
+        const altUrl = `${MONGO_API_URL}/picture/${ticketNumId}/${candidate.ownerId}`;
+        try {
+          const checkRes = await fetch(altUrl, { method: 'HEAD' });
+          if (checkRes.ok && checkRes.headers.get('content-type')?.includes('image')) {
+            foundUrl = altUrl;
+          }
+        } catch (err) { }
       }
-    } catch (err) { }
-  }
 
-  if (foundUrl) {
-    imageBlocks.push(`
+      if (foundUrl) {
+        imageBlocks.push(`
       <div class="ticket-image-card">
         <div class="ticket-image-label">${candidate.label}</div>
         <img src="${foundUrl}" alt="${candidate.label.toLowerCase()}">
       </div>`);
-  }
-  // If no after photo found, nothing is pushed — correct behaviour
-}
+      }
+      // If no after photo found, nothing is pushed — correct behaviour
+    }
 
     if (imageBlocks.length > 0) {
       imageHtml = `<div class="ticket-image-grid">${imageBlocks.join('')}</div>`;
@@ -2466,9 +2574,17 @@ async function refreshNotificationsBadge() {
       }
     }
 
+
+
     badge.textContent = String(count);
   } catch (err) {
     console.error('Failed to refresh notifications badge:', err);
     badge.textContent = '0';
   }
 }
+
+
+window.updateJobStatus = updateJobStatus;
+window.completeTicket = completeTicket;
+window.adminApproveTicket = adminApproveTicket;
+window.adminRejectTicket = adminRejectTicket;

@@ -4,7 +4,19 @@ const cors = require("cors");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: [
+    'http://localhost',
+    'http://localhost:5500',    // VS Code Live Server default
+    'http://127.0.0.1',
+    'http://127.0.0.1:5500',   // VS Code Live Server with IP
+    'https://www.datcom.co.za',
+    'https://datcom.co.za',
+    'https://infratrack.ddns.net',
+    'http://infratrack.ddns.net'
+  ],
+  credentials: true
+}));
 app.use(express.json());
 
 const db = mysql.createConnection({
@@ -529,11 +541,23 @@ app.put("/tickets/:id", (req, res) => {
     return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
   }
 
-  const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
-  db.query(sql, [statusId, ticketId], (err, result) => {
-    if (err) return res.status(500).json({ success: false, message: err.message });
-    res.json({ success: true, status_id: statusId, message: "Ticket status updated" });
-  });
+  
+
+  if (statusId === 4) {
+    // Worker marks as completed — just update status, do NOT archive yet
+    // Admin will review and decide whether to archive
+    const sql = "UPDATE ticket SET status_id = 4, completion_date = CURDATE() WHERE ticket_id = ?";
+    db.query(sql, [ticketId], (err) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, status_id: 4, message: "Ticket marked as completed. Awaiting admin approval." });
+    });
+  } else {
+    const sql = "UPDATE ticket SET status_id = ? WHERE ticket_id = ?";
+    db.query(sql, [statusId, ticketId], (err) => {
+      if (err) return res.status(500).json({ success: false, message: err.message });
+      res.json({ success: true, status_id: statusId, message: "Ticket status updated" });
+    });
+  }
 });
 // ────────────────────────────────────────────
 // 👷 GET ALL ACTIVE TECHNICIANS
@@ -614,6 +638,43 @@ app.delete("/tickets/:id", (req, res) => {
     if (err) return res.status(500).json({ success: false, message: err.message });
     if (result.affectedRows === 0) return res.json({ success: false, message: "Ticket not found" });
     res.json({ success: true, message: "Ticket deleted successfully" });
+  });
+});
+
+// ────────────────────────────────────────────
+// ✅ ADMIN APPROVES TICKET — moves to completed_tickets
+// ────────────────────────────────────────────
+app.post("/tickets/:id/approve", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  db.query("CALL move_ticket(?)", [ticketId], (err) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: "Ticket approved and archived successfully" });
+  });
+});
+
+// ────────────────────────────────────────────
+// ❌ ADMIN REJECTS TICKET — sends back to in progress
+// ────────────────────────────────────────────
+app.post("/tickets/:id/reject-completion", (req, res) => {
+  let ticketId = req.params.id;
+  if (ticketId && ticketId.startsWith('TK-')) {
+    ticketId = ticketId.slice(3);
+  }
+  if (!ticketId || isNaN(ticketId)) {
+    return res.status(400).json({ success: false, message: 'Invalid ticket identifier' });
+  }
+
+  // Send back to in progress (status_id = 3)
+  db.query("UPDATE ticket SET status_id = 3, completion_date = NULL WHERE ticket_id = ?", [ticketId], (err) => {
+    if (err) return res.status(500).json({ success: false, message: err.message });
+    res.json({ success: true, message: "Ticket sent back to in progress" });
   });
 });
 // ────────────────────────────────────────────
