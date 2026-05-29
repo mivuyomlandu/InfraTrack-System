@@ -12,6 +12,7 @@
 //const HOST = "105.228.61.32";
 //Online
 const HOST = "infratrack.ddns.net";
+const HTTPS_PORT = 8443; // ← your custom HTTPS port
 
 // ── STATE ─────────────────────────────────────────────────────
 // Note: Use https:// and remove the port numbers. 
@@ -22,8 +23,8 @@ const API_URL = `http://${HOST}:3000`;
 const MONGO_API_URL = `http://${HOST}:3001`;
 
 //Online
-//const API_URL = `https://${HOST}/api/main`;
-//const MONGO_API_URL = `https://${HOST}/api/mongo`;
+//const API_URL = `https://${HOST}:${HTTPS_PORT}/api/main`;
+//const MONGO_API_URL = `https://${HOST}:${HTTPS_PORT}/api/mongo`;
 
 const APP = {
   currentUser: null,
