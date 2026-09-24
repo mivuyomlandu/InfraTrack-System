@@ -177,6 +177,25 @@ Open `index.html` with a live server (e.g. VS Code Live Server extension).
 
 ---
 
+## 🧑‍💻 My Contribution — M.S. Mlandu
+
+This was a group project (Group 23). My individual contributions spanned frontend application logic, backend API work, and system design:
+
+**Frontend application logic (`app.js`)**
+- Contributed approximately 1,750 lines across multiple commits to the main application JavaScript
+- Built the ticket status update system, including the frontend controls and state handling
+- Developed the Worker (Contractor) dashboard — linking workers to the system, loading assigned tickets, and displaying worker-side ticket data
+- Implemented the Citizen profile section and the notification system
+- Connected the frontend to the backend REST API for ticket, worker, and notification operations
+
+**Backend API (`my-project/server.js`)**
+- Contributed to the Express.js backend, including routes and handlers supporting ticket status updates, worker dashboard operations, and notification delivery
+
+**System design**
+- Designed and documented the complete system flow diagram covering login and role detection, and the full navigation structure for the Citizen, Technician, and Admin dashboards — including sub-flows for ticket creation, ticket status transitions, technician assignment, and notifications
+
+---
+
 ## 👥 Team — Group 23
 
 | Name | Student Number |
